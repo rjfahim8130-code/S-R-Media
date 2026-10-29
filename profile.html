@@ -15,7 +15,9 @@
       <div class="logo">প্রোফাইল</div>
       <div style="width:40px;"></div>
     </div>
-    <div id="profileBox"><div class="loading"><div class="spinner"></div></div></div>
+    <div id="profileBox">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
   </div>
 
   <div class="bottom-nav">
@@ -26,36 +28,43 @@
   </div>
 
   <script>
-    async function load() {
+    let currentProfile = null;
+
+    async function loadProfile() {
       const user = await requireAuth();
       if (!user) return;
-      const profile = await getProfile();
-      if (!profile) return showToast('প্রোফাইল লোড ব্যর্থ', 'error');
 
-      const { data: bonuses } = await sb.from('referral_bonuses')
+      currentProfile = await getProfile();
+      if (!currentProfile) {
+        showToast('প্রোফাইল লোড ব্যর্থ', 'error');
+        return;
+      }
+
+      const { data: bonuses } = await sb
+        .from('referral_bonuses')
         .select('*')
-        .eq('referrer_id', profile.id)
+        .eq('referrer_id', currentProfile.id)
         .eq('is_claimed', false)
         .gt('expires_at', new Date().toISOString());
 
-      const link = `\( {location.origin}/register.html?ref= \){profile.referral_code}`;
+      const referralLink = window.location.origin + '/register.html?ref=' + (currentProfile.referral_code || '');
 
       document.getElementById('profileBox').innerHTML = `
         <div class="card text-center" style="padding:28px 20px;">
           <div style="width:70px;height:70px;background:linear-gradient(135deg,#6366f1,#c084fc);border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:800;">
-            ${(profile.full_name||'U')[0].toUpperCase()}
+            ${(currentProfile.full_name || 'U').charAt(0).toUpperCase()}
           </div>
-          <h2>${profile.full_name || 'ইউজার'}</h2>
+          <h2 style="margin-bottom:4px;">${currentProfile.full_name || 'ইউজার'}</h2>
           <p class="text-muted">${user.email}</p>
         </div>
 
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-value">${formatNumber(profile.coins)}</div>
+            <div class="stat-value">${formatNumber(currentProfile.coins)}</div>
             <div class="stat-label">পয়েন্ট</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${formatNumber(profile.total_quizzes_submitted)}</div>
+            <div class="stat-value">${formatNumber(currentProfile.total_quizzes_submitted)}</div>
             <div class="stat-label">কুইজ</div>
           </div>
         </div>
@@ -63,37 +72,51 @@
         <div class="card">
           <div class="card-title">রেফার কোড</div>
           <div style="background:var(--dark);padding:14px;border-radius:12px;text-align:center;font-size:1.3rem;font-weight:800;letter-spacing:2px;margin-bottom:12px;">
-            ${profile.referral_code || '------'}
+            ${currentProfile.referral_code || '------'}
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${link}').then(()=>showToast('লিংক কপি হয়েছে'))">লিংক কপি করুন</button>
+          <button class="btn btn-secondary btn-sm" id="copyLinkBtn">লিংক কপি করুন</button>
         </div>
 
         <div class="card">
           <div class="card-title">রেফার বোনাস</div>
-          ${bonuses?.length ? bonuses.map(b => `
+          ${bonuses && bonuses.length > 0 ? bonuses.map(b => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
               <div>
                 <div style="font-weight:600;">+${b.bonus_amount} পয়েন্ট</div>
-                <div class="text-muted" style="font-size:0.8rem;">মেয়াদ শেষ: ${timeAgo(b.expires_at)}</div>
+                <div class="text-muted" style="font-size:0.8rem;">মেয়াদ: ${timeAgo(b.expires_at)}</div>
               </div>
-              <button class="btn btn-sm btn-success" onclick="claim('\( {b.id}', \){b.bonus_amount})">ক্লেইম</button>
+              <button class="btn btn-sm btn-success" onclick="claimBonus('${b.id}', ${b.bonus_amount})">ক্লেইম</button>
             </div>
           `).join('') : '<p class="text-muted text-center">কোনো বোনাস নেই</p>'}
         </div>
 
-        <button class="btn btn-danger mt-3" onclick="if(confirm('লগআউট?')) signOut()">লগআউট</button>
+        <button class="btn btn-danger mt-3" onclick="if(confirm('লগআউট করতে চান?')) signOut()">লগআউট</button>
       `;
+
+      // কপি বাটন ইভেন্ট
+      document.getElementById('copyLinkBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(referralLink).then(() => {
+          showToast('রেফার লিংক কপি হয়েছে!');
+        }).catch(() => {
+          showToast('কপি করতে সমস্যা হয়েছে', 'error');
+        });
+      });
     }
 
-    window.claim = async (id, amount) => {
-      await sb.from('referral_bonuses').update({is_claimed:true, claimed_at:new Date().toISOString()}).eq('id', id);
-      const p = await getProfile();
-      await sb.from('profiles').update({coins: (p.coins||0) + amount}).eq('id', p.id);
-      showToast(`+${amount} পয়েন্ট ক্লেইম হয়েছে!`);
-      load();
-    };
+    async function claimBonus(id, amount) {
+      await sb.from('referral_bonuses')
+        .update({ is_claimed: true, claimed_at: new Date().toISOString() })
+        .eq('id', id);
 
-    load();
+      await sb.from('profiles')
+        .update({ coins: (currentProfile.coins || 0) + amount })
+        .eq('id', currentProfile.id);
+
+      showToast(`+${amount} পয়েন্ট ক্লেইম হয়েছে!`);
+      loadProfile();
+    }
+
+    loadProfile();
   </script>
 </body>
 </html>
