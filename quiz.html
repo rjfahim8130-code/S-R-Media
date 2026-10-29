@@ -6,183 +6,161 @@
   <title>কুইজ - NnowQuiz</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
 </head>
 <body>
   <div class="container page">
     <div class="header">
-      <button class="back-btn" onclick="confirmExit()">←</button>
+      <button class="back-btn" onclick="if(confirm('কুইজ ছেড়ে যেতে চান?')) location.href='home.html'">←</button>
       <div class="logo">কুইজ</div>
       <div id="quizProgress" class="badge badge-primary">১/৫</div>
     </div>
 
-    <div class="progress-bar">
-      <div class="progress-fill" id="progressFill" style="width:20%;"></div>
+    <div class="progress-bar" style="height:8px;background:var(--dark-3);border-radius:20px;overflow:hidden;margin-bottom:16px;">
+      <div class="progress-fill" id="progressFill" style="height:100%;width:20%;background:linear-gradient(90deg,#6366f1,#c084fc);border-radius:20px;"></div>
     </div>
 
     <div id="articleSection">
       <div class="card">
         <div class="card-title" id="articleTitle">প্রবন্ধ লোড হচ্ছে...</div>
-        <div class="article-content" id="articleContent" style="max-height:320px;overflow-y:auto;"></div>
+        <div id="articleContent" style="max-height:300px;overflow-y:auto;line-height:1.7;"></div>
       </div>
-      <button class="btn btn-primary" id="startQuestionsBtn" onclick="startQuestions()">প্রশ্নোত্তর শুরু করুন</button>
-      <p class="text-muted text-center mt-2" style="font-size:0.85rem;">প্রবন্ধ ভালো করে পড়ুন</p>
+      <button class="btn btn-primary" id="startQuestionsBtn">প্রশ্নোত্তর শুরু করুন</button>
     </div>
 
     <div id="questionsSection" style="display:none;">
-      <div class="question-card">
-        <div class="question-number" id="questionNumber">প্রশ্ন ১</div>
-        <div class="question-text" id="questionText"></div>
+      <div class="card">
+        <div id="questionNumber" style="font-size:0.85rem;color:var(--primary-light);font-weight:600;margin-bottom:8px;">প্রশ্ন ১</div>
+        <div id="questionText" style="font-size:1.1rem;font-weight:600;margin-bottom:20px;"></div>
         <div id="optionsContainer"></div>
       </div>
-      <button class="btn btn-primary" id="nextBtn" onclick="nextQuestion()" disabled>পরবর্তী প্রশ্ন</button>
-      <button class="btn btn-secondary mt-2" onclick="showArticleAgain()">প্রবন্ধ আবার পড়ুন</button>
+      <button class="btn btn-primary" id="nextBtn" disabled>পরবর্তী প্রশ্ন</button>
+      <button class="btn btn-secondary mt-2" id="showArticleBtn">প্রবন্ধ আবার পড়ুন</button>
     </div>
   </div>
 
-  <script src="supabase.js"></script>
   <script>
-    let profile = null, currentArticle = null, questions = [], currentQuestionIndex = 0, selectedAnswers = {}, currentSetNumber = 1;
+    let profile = null, currentArticle = null, questions = [], currentQ = 0, answers = {}, setNumber = 1;
 
     async function init() {
       const user = await requireAuth();
       if (!user) return;
       profile = await getProfile();
 
-      const { data: pause } = await supabase.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
-      if (pause && pause.value === 'true') {
-        showToast('কুইজ বর্তমানে বন্ধ', 'warning');
+      const { data: pause } = await sb.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
+      if (pause?.value === 'true') {
+        showToast('কুইজ বর্তমানে বন্ধ', 'error');
         setTimeout(() => location.href = 'home.html', 1500);
         return;
       }
 
-      await loadQuizData();
-    }
-
-    async function loadQuizData() {
-      const { data: articles } = await supabase.from('articles').select('*').eq('is_active', true).order('sort_order');
-      if (!articles || articles.length === 0) {
-        document.getElementById('articleSection').innerHTML = `<div class="empty-state"><p>কোনো প্রবন্ধ নেই</p><a href="home.html" class="btn btn-primary mt-3">হোমে যান</a></div>`;
+      const { data: articles } = await sb.from('articles').select('*').eq('is_active', true).order('sort_order');
+      if (!articles?.length) {
+        document.getElementById('articleSection').innerHTML = '<div class="empty-state"><p>কোনো প্রবন্ধ নেই</p></div>';
         return;
       }
 
-      const { data: submissions } = await supabase.from('quiz_submissions').select('id').eq('user_id', profile.id);
-      const totalSubmitted = submissions ? submissions.length : 0;
-      const articleIndex = totalSubmitted % articles.length;
-      currentSetNumber = (Math.floor(totalSubmitted / articles.length) % 3) + 1;
-      currentArticle = articles[articleIndex];
+      const { data: subs } = await sb.from('quiz_submissions').select('id').eq('user_id', profile.id);
+      const total = subs?.length || 0;
+      currentArticle = articles[total % articles.length];
+      setNumber = (Math.floor(total / articles.length) % 3) + 1;
 
-      const { data: qs } = await supabase.from('questions').select('*').eq('article_id', currentArticle.id).eq('set_number', currentSetNumber).limit(5);
-      questions = qs && qs.length > 0 ? qs : [];
+      const { data: qs } = await sb.from('questions').select('*').eq('article_id', currentArticle.id).eq('set_number', setNumber).limit(5);
+      questions = qs || [];
 
-      if (questions.length === 0) {
-        document.getElementById('articleSection').innerHTML = `<div class="empty-state"><p>এই প্রবন্ধের প্রশ্ন নেই</p><a href="home.html" class="btn btn-primary mt-3">হোমে যান</a></div>`;
+      if (!questions.length) {
+        document.getElementById('articleSection').innerHTML = '<div class="empty-state"><p>প্রশ্ন নেই</p></div>';
         return;
       }
 
       document.getElementById('articleTitle').innerText = currentArticle.title;
-      document.getElementById('articleContent').innerHTML = currentArticle.content.split('\n').map(p => p.trim() ? `<p>${p}</p>` : '').join('');
+      document.getElementById('articleContent').innerHTML = currentArticle.content.split('\n').filter(p => p.trim()).map(p => `<p style="margin-bottom:12px;">${p}</p>`).join('');
     }
 
-    function startQuestions() {
+    document.getElementById('startQuestionsBtn').onclick = () => {
       document.getElementById('articleSection').style.display = 'none';
       document.getElementById('questionsSection').style.display = 'block';
-      currentQuestionIndex = 0;
-      selectedAnswers = {};
-      showQuestion();
-    }
+      currentQ = 0;
+      answers = {};
+      showQ();
+    };
 
-    function showQuestion() {
-      const q = questions[currentQuestionIndex];
-      document.getElementById('questionNumber').innerText = `প্রশ্ন ${currentQuestionIndex + 1} / ${questions.length}`;
+    document.getElementById('showArticleBtn').onclick = () => {
+      document.getElementById('questionsSection').style.display = 'none';
+      document.getElementById('articleSection').style.display = 'block';
+    };
+
+    function showQ() {
+      const q = questions[currentQ];
+      document.getElementById('questionNumber').innerText = `প্রশ্ন ${currentQ + 1} / ${questions.length}`;
       document.getElementById('questionText').innerText = q.question_text;
-      document.getElementById('quizProgress').innerText = `\( {currentQuestionIndex + 1}/ \){questions.length}`;
-      document.getElementById('progressFill').style.width = `${((currentQuestionIndex + 1) / questions.length) * 100}%`;
+      document.getElementById('quizProgress').innerText = `\( {currentQ + 1}/ \){questions.length}`;
+      document.getElementById('progressFill').style.width = `${((currentQ + 1) / questions.length) * 100}%`;
 
-      const options = [
-        { key: 'A', text: q.option_a },
-        { key: 'B', text: q.option_b },
-        { key: 'C', text: q.option_c },
-        { key: 'D', text: q.option_d }
+      const opts = [
+        {k:'A', t:q.option_a}, {k:'B', t:q.option_b},
+        {k:'C', t:q.option_c}, {k:'D', t:q.option_d}
       ];
 
-      document.getElementById('optionsContainer').innerHTML = options.map(opt => `
-        <div class="option \( {selectedAnswers[currentQuestionIndex] === opt.key ? 'selected' : ''}" onclick="selectOption(' \){opt.key}')">
-          <div class="option-letter">${opt.key}</div>
-          <div>${opt.text}</div>
+      document.getElementById('optionsContainer').innerHTML = opts.map(o => `
+        <div class="option \( {answers[currentQ]===o.k?'selected':''}" onclick="selectOpt(' \){o.k}')" style="display:flex;gap:12px;align-items:center;padding:14px;background:var(--dark);border:2px solid var(--dark-3);border-radius:12px;margin-bottom:10px;cursor:pointer;">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--dark-3);display:flex;align-items:center;justify-content:center;font-weight:700;">${o.k}</div>
+          <div>${o.t}</div>
         </div>
       `).join('');
 
-      const nextBtn = document.getElementById('nextBtn');
-      nextBtn.innerText = currentQuestionIndex === questions.length - 1 ? 'কুইজ জমা দিন' : 'পরবর্তী প্রশ্ন';
-      nextBtn.disabled = !selectedAnswers[currentQuestionIndex];
+      const btn = document.getElementById('nextBtn');
+      btn.innerText = currentQ === questions.length - 1 ? 'কুইজ জমা দিন' : 'পরবর্তী প্রশ্ন';
+      btn.disabled = !answers[currentQ];
     }
 
-    function selectOption(key) {
-      selectedAnswers[currentQuestionIndex] = key;
-      showQuestion();
-    }
+    window.selectOpt = (k) => {
+      answers[currentQ] = k;
+      showQ();
+    };
 
-    function nextQuestion() {
-      if (!selectedAnswers[currentQuestionIndex]) return;
-      if (currentQuestionIndex < questions.length - 1) {
-        currentQuestionIndex++;
-        showQuestion();
+    document.getElementById('nextBtn').onclick = async () => {
+      if (!answers[currentQ]) return;
+      if (currentQ < questions.length - 1) {
+        currentQ++;
+        showQ();
       } else {
-        submitQuiz();
-      }
-    }
+        let correct = 0;
+        questions.forEach((q,i) => { if (answers[i] === q.correct_option) correct++; });
+        const coins = correct * 10;
 
-    async function submitQuiz() {
-      let correctCount = 0;
-      questions.forEach((q, i) => {
-        if (selectedAnswers[i] === q.correct_option) correctCount++;
-      });
-      const coinsEarned = correctCount * 10;
+        await sb.from('quiz_submissions').insert({
+          user_id: profile.id,
+          article_id: currentArticle.id,
+          set_number: setNumber,
+          score: correct,
+          coins_earned: coins
+        });
 
-      await supabase.from('quiz_submissions').insert({
-        user_id: profile.id,
-        article_id: currentArticle.id,
-        set_number: currentSetNumber,
-        score: correctCount,
-        coins_earned: coinsEarned
-      });
+        await sb.from('profiles').update({
+          coins: (profile.coins || 0) + coins,
+          total_quizzes_submitted: (profile.total_quizzes_submitted || 0) + 1,
+          last_quiz_at: new Date().toISOString()
+        }).eq('id', profile.id);
 
-      await supabase.from('profiles').update({
-        coins: (profile.coins || 0) + coinsEarned,
-        total_quizzes_submitted: (profile.total_quizzes_submitted || 0) + 1,
-        last_quiz_at: new Date().toISOString()
-      }).eq('id', profile.id);
-
-      // Referral bonus 10%
-      if (profile.referred_by && coinsEarned > 0) {
-        const bonus = Math.floor(coinsEarned * 0.1);
-        if (bonus > 0) {
-          await supabase.from('referral_bonuses').insert({
-            referrer_id: profile.referred_by,
-            referred_user_id: profile.id,
-            bonus_amount: bonus,
-            expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
-          });
+        if (profile.referred_by && coins > 0) {
+          const bonus = Math.floor(coins * 0.1);
+          if (bonus > 0) {
+            await sb.from('referral_bonuses').insert({
+              referrer_id: profile.referred_by,
+              referred_user_id: profile.id,
+              bonus_amount: bonus,
+              expires_at: new Date(Date.now() + 12*60*60*1000).toISOString()
+            });
+          }
         }
+
+        sessionStorage.setItem('quizResult', JSON.stringify({
+          correct, total: questions.length, coins, articleTitle: currentArticle.title
+        }));
+        location.href = 'result.html';
       }
-
-      sessionStorage.setItem('quizResult', JSON.stringify({
-        correct: correctCount,
-        total: questions.length,
-        coins: coinsEarned,
-        articleTitle: currentArticle.title
-      }));
-      window.location.href = 'result.html';
-    }
-
-    function showArticleAgain() {
-      document.getElementById('questionsSection').style.display = 'none';
-      document.getElementById('articleSection').style.display = 'block';
-    }
-
-    function confirmExit() {
-      if (confirm('কুইজ ছেড়ে যেতে চান?')) location.href = 'home.html';
-    }
+    };
 
     init();
   </script>
