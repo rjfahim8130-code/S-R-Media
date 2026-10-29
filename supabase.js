@@ -1,14 +1,8 @@
-// js/supabase.js
-// NnowQuiz - Supabase Configuration (New Project)
-
+// supabase.js
 const SUPABASE_URL = 'https://rejqktrpkyycjjoeviqw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlanFrdHJwa3l5Y2pqb2V2aXF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMzk1NzcsImV4cCI6MjEwODgxNTU3N30.ISEz7r3crnLl73UUBSVYrgPoIYzCVfb24LVqWOQuM-U';
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// ======================
-// Auth Helper Functions
-// ======================
 
 async function getCurrentUser() {
   try {
@@ -69,10 +63,6 @@ async function signOut() {
   window.location.href = 'login.html';
 }
 
-// ======================
-// Utility Functions
-// ======================
-
 function showToast(message, type = 'success') {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
@@ -105,4 +95,4 @@ function timeAgo(dateString) {
   if (seconds < 3600) return Math.floor(seconds / 60) + ' মিনিট আগে';
   if (seconds < 86400) return Math.floor(seconds / 3600) + ' ঘণ্টা আগে';
   return Math.floor(seconds / 86400) + ' দিন আগে';
-    }
+}
