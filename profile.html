@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>প্রোফাইল - NnowQuiz</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -16,78 +16,118 @@
     </div>
 
     <div id="profileContainer">
-      <div class="loading">
-        <div class="spinner"></div>
-      </div>
+      <div class="loading"><div class="spinner"></div></div>
     </div>
   </div>
 
-  <!-- Bottom Navigation -->
   <div class="bottom-nav">
-    <a href="home.html" class="nav-item">
-      <span class="icon">🏠</span>
-      <span>হোম</span>
-    </a>
-    <a href="articles.html" class="nav-item">
-      <span class="icon">📚</span>
-      <span>প্রবন্ধ</span>
-    </a>
-    <a href="leaderboard.html" class="nav-item">
-      <span class="icon">🏆</span>
-      <span>র‍্যাঙ্ক</span>
-    </a>
-    <a href="profile.html" class="nav-item active">
-      <span class="icon">👤</span>
-      <span>প্রোফাইল</span>
-    </a>
+    <a href="home.html" class="nav-item"><span class="icon">🏠</span><span>হোম</span></a>
+    <a href="articles.html" class="nav-item"><span class="icon">📚</span><span>প্রবন্ধ</span></a>
+    <a href="leaderboard.html" class="nav-item"><span class="icon">🏆</span><span>র‍্যাঙ্ক</span></a>
+    <a href="profile.html" class="nav-item active"><span class="icon">👤</span><span>প্রোফাইল</span></a>
   </div>
 
   <script src="supabase.js"></script>
   <script>
+    let profile = null;
+
     async function loadProfile() {
       const user = await requireAuth();
       if (!user) return;
 
-      const profile = await getProfile();
+      profile = await getProfile();
       if (!profile) {
         showToast('প্রোফাইল লোড ব্যর্থ', 'error');
         return;
       }
 
+      // Load claimable bonuses
+      const { data: bonuses } = await supabase
+        .from('referral_bonuses')
+        .select('*')
+        .eq('referrer_id', profile.id)
+        .eq('is_claimed', false)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+
+      const referralLink = `\( {window.location.origin}/register.html?ref= \){profile.referral_code}`;
+
       document.getElementById('profileContainer').innerHTML = `
-        <div class="card text-center" style="padding: 28px 20px;">
-          <div style="width:80px; height:80px; background:linear-gradient(135deg,#6366f1,#c084fc); border-radius:50%; margin:0 auto 16px; display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:800;">
+        <div class="card text-center" style="padding:28px 20px;">
+          <div style="width:80px;height:80px;background:linear-gradient(135deg,#6366f1,#c084fc);border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;">
             ${(profile.full_name || 'U').charAt(0).toUpperCase()}
           </div>
-          <h2 style="font-size:1.4rem; margin-bottom:4px;">${profile.full_name || 'ইউজার'}</h2>
-          <p class="text-muted" style="font-size:0.9rem;">${user.email}</p>
+          <h2 style="font-size:1.4rem;margin-bottom:4px;">${profile.full_name || 'ইউজার'}</h2>
+          <p class="text-muted">${user.email}</p>
         </div>
 
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-value">${formatNumber(profile.coins || 0)}</div>
+            <div class="stat-value">${formatNumber(profile.coins)}</div>
             <div class="stat-label">মোট পয়েন্ট</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${formatNumber(profile.total_quizzes_submitted || 0)}</div>
+            <div class="stat-value">${formatNumber(profile.total_quizzes_submitted)}</div>
             <div class="stat-label">কুইজ সম্পন্ন</div>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-title">অ্যাকাউন্ট তথ্য</div>
-          <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
-            <span class="text-muted">যোগদানের তারিখ</span>
-            <span>${new Date(profile.created_at).toLocaleDateString('bn-BD')}</span>
+          <div class="card-title">আপনার রেফার কোড</div>
+          <div style="background:var(--dark);padding:14px;border-radius:12px;text-align:center;font-size:1.4rem;font-weight:800;letter-spacing:2px;margin-bottom:12px;">
+            ${profile.referral_code || '------'}
           </div>
-          <div style="display:flex; justify-content:space-between; padding:10px 0;">
-            <span class="text-muted">শেষ কুইজ</span>
-            <span>${profile.last_quiz_at ? timeAgo(profile.last_quiz_at) : 'এখনো দেননি'}</span>
+          <button class="btn btn-secondary btn-sm" onclick="copyReferralLink('${referralLink}')">লিংক কপি করুন</button>
+          <p class="text-muted mt-2" style="font-size:0.85rem;">বন্ধুদের রেফার করুন এবং তাদের পয়েন্টের ১০% বোনাস পান</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">রেফার বোনাস ক্লেইম</div>
+          <div id="bonusList">
+            ${bonuses && bonuses.length > 0 ? bonuses.map(b => `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+                <div>
+                  <div style="font-weight:600;">+${b.bonus_amount} পয়েন্ট</div>
+                  <div class="text-muted" style="font-size:0.8rem;">মেয়াদ: ${timeAgo(b.expires_at)}</div>
+                </div>
+                <button class="btn btn-sm btn-success" onclick="claimBonus('${b.id}', ${b.bonus_amount})">ক্লেইম</button>
+              </div>
+            `).join('') : '<p class="text-muted text-center">কোনো বোনাস নেই</p>'}
           </div>
         </div>
 
         <button class="btn btn-danger mt-3" onclick="handleLogout()">লগআউট</button>
       `;
+    }
+
+    function copyReferralLink(link) {
+      navigator.clipboard.writeText(link).then(() => {
+        showToast('রেফার লিংক কপি হয়েছে!');
+      }).catch(() => {
+        showToast('কপি করতে সমস্যা', 'error');
+      });
+    }
+
+    async function claimBonus(bonusId, amount) {
+      // Simple claim (every 5th can later show ad)
+      const { error } = await supabase
+        .from('referral_bonuses')
+        .update({ is_claimed: true, claimed_at: new Date().toISOString() })
+        .eq('id', bonusId);
+
+      if (error) {
+        showToast('ক্লেইম ব্যর্থ', 'error');
+        return;
+      }
+
+      // Add coins
+      await supabase
+        .from('profiles')
+        .update({ coins: (profile.coins || 0) + amount })
+        .eq('id', profile.id);
+
+      showToast(`+${amount} পয়েন্ট ক্লেইম হয়েছে!`);
+      loadProfile();
     }
 
     async function handleLogout() {
