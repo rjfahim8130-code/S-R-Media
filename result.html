@@ -6,69 +6,49 @@
   <title>রেজাল্ট - NnowQuiz</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
 </head>
 <body>
   <div class="container page">
     <div class="header">
       <div class="logo">রেজাল্ট</div>
     </div>
-
-    <div id="resultContainer">
+    <div id="resultBox">
       <div class="loading"><div class="spinner"></div></div>
     </div>
   </div>
 
-  <script src="supabase.js"></script>
   <script>
-    async function showResult() {
+    (async () => {
       await requireAuth();
+      const data = sessionStorage.getItem('quizResult');
+      if (!data) return location.href = 'home.html';
 
-      const resultData = sessionStorage.getItem('quizResult');
-      if (!resultData) {
-        window.location.href = 'home.html';
-        return;
-      }
-
-      const result = JSON.parse(resultData);
+      const r = JSON.parse(data);
       sessionStorage.removeItem('quizResult');
+      const pct = Math.round((r.correct / r.total) * 100);
+      let msg = pct >= 80 ? 'দারুণ!' : pct >= 60 ? 'ভালো!' : pct >= 40 ? 'আরও চেষ্টা করুন' : 'প্রবন্ধ আবার পড়ুন';
 
-      const percentage = Math.round((result.correct / result.total) * 100);
-      let message = '', emoji = '';
-
-      if (percentage >= 80) { message = 'দারুণ করেছেন!'; emoji = '🔥'; }
-      else if (percentage >= 60) { message = 'ভালো হয়েছে!'; emoji = '👍'; }
-      else if (percentage >= 40) { message = 'আরও ভালো করতে পারবেন!'; emoji = '💪'; }
-      else { message = 'প্রবন্ধ আবার পড়ে চেষ্টা করুন!'; emoji = '📚'; }
-
-      document.getElementById('resultContainer').innerHTML = `
+      document.getElementById('resultBox').innerHTML = `
         <div class="card text-center" style="padding:32px 20px;">
-          <div style="font-size:4rem;margin-bottom:12px;">${emoji}</div>
-          <h2 style="font-size:1.5rem;margin-bottom:8px;">${message}</h2>
-          <p class="text-muted mb-4">${result.articleTitle}</p>
-
-          <div class="stats-grid" style="margin-bottom:24px;">
+          <div style="font-size:3.5rem;margin-bottom:12px;">${pct>=80?'🔥':pct>=60?'👍':'📚'}</div>
+          <h2 style="margin-bottom:8px;">${msg}</h2>
+          <p class="text-muted mb-3">${r.articleTitle}</p>
+          <div class="stats-grid">
             <div class="stat-card">
-              <div class="stat-value">\( {result.correct}/ \){result.total}</div>
-              <div class="stat-label">সঠিক উত্তর</div>
+              <div class="stat-value">\( {r.correct}/ \){r.total}</div>
+              <div class="stat-label">সঠিক</div>
             </div>
             <div class="stat-card">
-              <div class="stat-value" style="color:#34d399;">+${result.coins}</div>
-              <div class="stat-label">পয়েন্ট পেয়েছেন</div>
+              <div class="stat-value" style="color:#34d399;">+${r.coins}</div>
+              <div class="stat-label">পয়েন্ট</div>
             </div>
           </div>
-
-          <div class="progress-bar mb-3">
-            <div class="progress-fill" style="width:${percentage}%;"></div>
-          </div>
-          <p class="text-muted mb-4">${percentage}% স্কোর</p>
-
-          <a href="quiz.html" class="btn btn-primary mb-2">আবার কুইজ খেলুন</a>
-          <a href="home.html" class="btn btn-secondary">হোমে ফিরে যান</a>
+          <a href="quiz.html" class="btn btn-primary mb-2">আবার খেলুন</a>
+          <a href="home.html" class="btn btn-secondary">হোমে যান</a>
         </div>
       `;
-    }
-
-    showResult();
+    })();
   </script>
 </body>
 </html>
