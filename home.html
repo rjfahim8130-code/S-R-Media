@@ -4,24 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>হোম - NnowQuiz</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="container page">
-    <!-- Header -->
     <div class="header">
       <div class="logo">NnowQuiz</div>
-      <div id="userPoints" class="badge badge-primary" style="font-size:0.9rem; padding:6px 12px;">০ পয়েন্ট</div>
+      <div id="userPoints" class="badge badge-primary" style="font-size:0.9rem;padding:6px 12px;">০ পয়েন্ট</div>
     </div>
 
-    <!-- Welcome -->
-    <div class="card" style="background: linear-gradient(135deg, #312e81, #1e1b4b);">
-      <h2 style="font-size:1.3rem; margin-bottom:6px;">হাই, <span id="userName">ইউজার</span>! 👋</h2>
-      <p class="text-muted" style="font-size:0.95rem;">আজকের কুইজে অংশ নিয়ে জ্ঞান বাড়াও এবং লিডারবোর্ডে জায়গা করে নাও</p>
+    <div class="card" style="background:linear-gradient(135deg,#312e81,#1e1b4b);">
+      <h2 style="font-size:1.3rem;margin-bottom:6px;">হাই, <span id="userName">ইউজার</span>! 👋</h2>
+      <p class="text-muted" style="font-size:0.95rem;">আজকের কুইজে অংশ নিয়ে পয়েন্ট জিতুন</p>
     </div>
 
-    <!-- Stats -->
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-value" id="totalPoints">০</div>
@@ -33,47 +30,29 @@
       </div>
     </div>
 
-    <!-- Main Actions -->
     <div class="card">
       <div class="card-title">কুইজ খেলুন</div>
       <p class="text-muted mb-3" style="font-size:0.9rem;">প্রবন্ধ পড়ে কুইজ দিয়ে পয়েন্ট জিতুন</p>
-      <button class="btn btn-primary" id="startQuizBtn" onclick="startQuiz()">
-        কুইজ শুরু করুন
-      </button>
+      <button class="btn btn-primary" id="startQuizBtn" onclick="startQuiz()">কুইজ শুরু করুন</button>
       <p id="quizStatus" class="text-muted text-center mt-2" style="font-size:0.85rem;"></p>
     </div>
 
     <div class="card">
       <div class="card-title">প্রবন্ধ পড়ুন</div>
-      <p class="text-muted mb-3" style="font-size:0.9rem;">সব প্রবন্ধ এক জায়গায়</p>
       <a href="articles.html" class="btn btn-secondary">সব প্রবন্ধ দেখুন</a>
     </div>
 
     <div class="card">
       <div class="card-title">লিডারবোর্ড</div>
-      <p class="text-muted mb-3" style="font-size:0.9rem;">টপ পারফর্মারদের দেখুন</p>
       <a href="leaderboard.html" class="btn btn-outline">লিডারবোর্ড দেখুন</a>
     </div>
   </div>
 
-  <!-- Bottom Navigation -->
   <div class="bottom-nav">
-    <a href="home.html" class="nav-item active">
-      <span class="icon">🏠</span>
-      <span>হোম</span>
-    </a>
-    <a href="articles.html" class="nav-item">
-      <span class="icon">📚</span>
-      <span>প্রবন্ধ</span>
-    </a>
-    <a href="leaderboard.html" class="nav-item">
-      <span class="icon">🏆</span>
-      <span>র‍্যাঙ্ক</span>
-    </a>
-    <a href="profile.html" class="nav-item">
-      <span class="icon">👤</span>
-      <span>প্রোফাইল</span>
-    </a>
+    <a href="home.html" class="nav-item active"><span class="icon">🏠</span><span>হোম</span></a>
+    <a href="articles.html" class="nav-item"><span class="icon">📚</span><span>প্রবন্ধ</span></a>
+    <a href="leaderboard.html" class="nav-item"><span class="icon">🏆</span><span>র‍্যাঙ্ক</span></a>
+    <a href="profile.html" class="nav-item"><span class="icon">👤</span><span>প্রোফাইল</span></a>
   </div>
 
   <script src="supabase.js"></script>
@@ -87,26 +66,20 @@
 
       profile = await getProfile();
       if (!profile) {
-        showToast('প্রোফাইল লোড করতে সমস্যা', 'error');
+        showToast('প্রোফাইল লোড সমস্যা', 'error');
         return;
       }
 
       document.getElementById('userName').innerText = profile.full_name || 'ইউজার';
-      document.getElementById('totalPoints').innerText = formatNumber(profile.coins || 0);
-      document.getElementById('userPoints').innerText = formatNumber(profile.coins || 0) + ' পয়েন্ট';
-      document.getElementById('totalQuizzes').innerText = formatNumber(profile.total_quizzes_submitted || 0);
+      document.getElementById('totalPoints').innerText = formatNumber(profile.coins);
+      document.getElementById('userPoints').innerText = formatNumber(profile.coins) + ' পয়েন্ট';
+      document.getElementById('totalQuizzes').innerText = formatNumber(profile.total_quizzes_submitted);
 
-      // Check if quiz is paused
-      const { data: settings } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'quiz_paused')
-        .single();
-
+      const { data: settings } = await supabase.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
       if (settings && settings.value === 'true') {
         quizPaused = true;
         document.getElementById('startQuizBtn').disabled = true;
-        document.getElementById('startQuizBtn').innerText = 'কুইজ বর্তমানে বন্ধ আছে';
+        document.getElementById('startQuizBtn').innerText = 'কুইজ বর্তমানে বন্ধ';
         document.getElementById('quizStatus').innerText = 'অ্যাডমিন কুইজ পজ করেছেন';
       }
     }
@@ -117,26 +90,18 @@
         return;
       }
 
-      // Check session limit (8 quizzes per 2 hours)
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      
-      const { data: recentQuizzes, error } = await supabase
+      const { data: recent } = await supabase
         .from('quiz_submissions')
         .select('id')
         .eq('user_id', profile.id)
         .gte('submitted_at', twoHoursAgo);
 
-      if (error) {
-        console.error(error);
-      }
-
-      const count = recentQuizzes ? recentQuizzes.length : 0;
-      if (count >= 8) {
-        showToast('আপনি গত ২ ঘণ্টায় ৮টি কুইজ দিয়েছেন। কিছুক্ষণ পর আবার চেষ্টা করুন।', 'warning');
+      if (recent && recent.length >= 8) {
+        showToast('২ ঘণ্টায় সর্বোচ্চ ৮টি কুইজ দেওয়া যাবে', 'warning');
         return;
       }
 
-      // Go to quiz page
       window.location.href = 'quiz.html';
     }
 
