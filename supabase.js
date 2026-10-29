@@ -10,7 +10,7 @@ async function getCurrentUser() {
     if (error || !user) return null;
     return user;
   } catch (e) {
-    console.error('getCurrentUser error:', e);
+    console.error(e);
     return null;
   }
 }
@@ -49,7 +49,6 @@ async function requireAuth() {
 async function requireAdmin() {
   const user = await requireAuth();
   if (!user) return null;
-
   const admin = await isAdmin();
   if (!admin) {
     window.location.href = 'home.html';
@@ -72,10 +71,7 @@ function showToast(message, type = 'success') {
   toast.innerText = message;
   document.body.appendChild(toast);
 
-  setTimeout(() => {
-    toast.classList.add('show');
-  }, 10);
-
+  setTimeout(() => toast.classList.add('show'), 10);
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
@@ -83,16 +79,20 @@ function showToast(message, type = 'success') {
 }
 
 function formatNumber(num) {
-  return new Intl.NumberFormat('en-BD').format(num);
+  return new Intl.NumberFormat('en-BD').format(num || 0);
 }
 
 function timeAgo(dateString) {
   const date = new Date(dateString);
   const now = new Date();
   const seconds = Math.floor((now - date) / 1000);
-
   if (seconds < 60) return 'এইমাত্র';
   if (seconds < 3600) return Math.floor(seconds / 60) + ' মিনিট আগে';
   if (seconds < 86400) return Math.floor(seconds / 3600) + ' ঘণ্টা আগে';
   return Math.floor(seconds / 86400) + ' দিন আগে';
+}
+
+// Generate simple referral code from user id
+function generateReferralCode(userId) {
+  return userId.replace(/-/g, '').substring(0, 8).toUpperCase();
 }
