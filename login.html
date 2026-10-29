@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>লগইন - NnowQuiz</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -16,14 +16,12 @@
       <form id="loginForm">
         <div class="form-group">
           <label>ইমেইল</label>
-          <input type="email" id="email" class="form-control" placeholder="আপনার ইমেইল লিখুন" required>
+          <input type="email" id="email" class="form-control" placeholder="আপনার ইমেইল" required>
         </div>
-
         <div class="form-group">
           <label>পাসওয়ার্ড</label>
-          <input type="password" id="password" class="form-control" placeholder="পাসওয়ার্ড লিখুন" required>
+          <input type="password" id="password" class="form-control" placeholder="পাসওয়ার্ড" required>
         </div>
-
         <button type="submit" class="btn btn-primary" id="loginBtn">লগইন করুন</button>
       </form>
 
@@ -35,7 +33,6 @@
 
   <script src="supabase.js"></script>
   <script>
-    // Redirect if already logged in
     (async () => {
       const user = await getCurrentUser();
       if (user) window.location.href = 'home.html';
@@ -50,67 +47,17 @@
       btn.disabled = true;
       btn.innerText = 'লগইন হচ্ছে...';
 
-      // 1. Authenticate with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-      if (authError) {
-        showToast(authError.message || 'লগইন ব্যর্থ হয়েছে', 'error');
+      if (error) {
+        showToast(error.message || 'লগইন ব্যর্থ', 'error');
         btn.disabled = false;
         btn.innerText = 'লগইন করুন';
         return;
       }
-
-      const userId = authData.user.id;
-      const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
-      // 2. Check profile login count for today
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('login_count_today, last_login_date')
-        .eq('id', userId)
-        .single();
-
-      if (profileError) {
-        console.error(profileError);
-      }
-
-      let currentCount = 0;
-      if (profile) {
-        // If last login date is today, use existing count. Otherwise reset to 0.
-        if (profile.last_login_date === todayStr) {
-          currentCount = profile.login_count_today || 0;
-        }
-      }
-
-      // 3. Enforce Max 3 Logins Per Day limit
-      if (currentCount >= 3) {
-        // Sign out immediately because limit exceeded
-        await supabase.auth.signOut();
-        showToast('আজকের জন্য আপনার সর্বোচ্চ ৩ বার লগইন সীমা শেষ!', 'error');
-        btn.disabled = false;
-        btn.innerText = 'লগইন করুন';
-        return;
-      }
-
-      // 4. Increment login count and update last login date
-      const newCount = profile && profile.last_login_date === todayStr ? currentCount + 1 : 1;
-      
-      await supabase
-        .from('profiles')
-        .update({
-          login_count_today: newCount,
-          last_login_date: todayStr,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userId);
 
       showToast('সফলভাবে লগইন হয়েছে!');
-      setTimeout(() => {
-        window.location.href = 'home.html';
-      }, 800);
+      setTimeout(() => window.location.href = 'home.html', 800);
     });
   </script>
 </body>
