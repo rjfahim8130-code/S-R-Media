@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>প্রবন্ধ - NnowQuiz</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -22,15 +22,12 @@
       </div>
     </div>
 
-    <!-- Ad Placeholder (Native / Banner will be placed here later) -->
-    <div id="nativeAdSlot" style="margin: 20px 0; min-height: 80px;"></div>
-
-    <div style="margin-top: 24px;">
+    <div style="margin-top:24px;">
       <a href="articles.html" class="btn btn-secondary">← সব প্রবন্ধে ফিরে যান</a>
     </div>
   </div>
 
-  <script src="js/supabase.js"></script>
+  <script src="supabase.js"></script>
   <script>
     async function loadArticle() {
       const params = new URLSearchParams(window.location.search);
@@ -58,7 +55,7 @@
       if (error || !article) {
         container.innerHTML = `
           <div class="empty-state">
-            <div class="icon">❌</div>
+            <div style="font-size:3rem;">❌</div>
             <p>প্রবন্ধ লোড করা যায়নি</p>
             <a href="articles.html" class="btn btn-primary mt-3">ফিরে যান</a>
           </div>
@@ -70,9 +67,9 @@
 
       container.innerHTML = `
         <div class="card">
-          <h1 style="font-size:1.4rem; font-weight:800; margin-bottom:16px; line-height:1.4;">${article.title}</h1>
-          <div class="article-content">
-            \( {article.content.split('\n').map(p => p.trim() ? `<p> \){p}</p>` : '').join('')}
+          <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:16px;line-height:1.4;">${article.title}</h1>
+          <div style="font-size:1.05rem;line-height:1.8;color:#e2e8f0;">
+            \( {article.content.split('\n').map(p => p.trim() ? `<p style="margin-bottom:16px;"> \){p}</p>` : '').join('')}
           </div>
         </div>
       `;
