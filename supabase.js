@@ -2,11 +2,12 @@
 const SUPABASE_URL = 'https://rejqktrpkyycjjoeviqw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlanFrdHJwa3l5Y2pqb2V2aXF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMzk1NzcsImV4cCI6MjEwODgxNTU3N30.ISEz7r3crnLl73UUBSVYrgPoIYzCVfb24LVqWOQuM-U';
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// CDN এর সাথে কনফ্লিক্ট এড়াতে আলাদা নাম ব্যবহার করা হয়েছে
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function getCurrentUser() {
   try {
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const { data: { user }, error } = await sb.auth.getUser();
     if (error || !user) return null;
     return user;
   } catch (e) {
@@ -19,14 +20,14 @@ async function getProfile() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .single();
 
   if (error) {
-    console.error('Profile fetch error:', error);
+    console.error('Profile error:', error);
     return null;
   }
   return data;
@@ -49,8 +50,7 @@ async function requireAuth() {
 async function requireAdmin() {
   const user = await requireAuth();
   if (!user) return null;
-  const admin = await isAdmin();
-  if (!admin) {
+  if (!(await isAdmin())) {
     window.location.href = 'home.html';
     return null;
   }
@@ -58,13 +58,13 @@ async function requireAdmin() {
 }
 
 async function signOut() {
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
   window.location.href = 'login.html';
 }
 
 function showToast(message, type = 'success') {
-  const existing = document.querySelector('.toast');
-  if (existing) existing.remove();
+  const old = document.querySelector('.toast');
+  if (old) old.remove();
 
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
@@ -83,16 +83,9 @@ function formatNumber(num) {
 }
 
 function timeAgo(dateString) {
-  const date = new Date(dateString);
-  const now = new Date();
-  const seconds = Math.floor((now - date) / 1000);
+  const seconds = Math.floor((new Date() - new Date(dateString)) / 1000);
   if (seconds < 60) return 'এইমাত্র';
   if (seconds < 3600) return Math.floor(seconds / 60) + ' মিনিট আগে';
   if (seconds < 86400) return Math.floor(seconds / 3600) + ' ঘণ্টা আগে';
   return Math.floor(seconds / 86400) + ' দিন আগে';
-}
-
-// Generate simple referral code from user id
-function generateReferralCode(userId) {
-  return userId.replace(/-/g, '').substring(0, 8).toUpperCase();
 }
