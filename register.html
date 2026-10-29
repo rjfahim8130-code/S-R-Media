@@ -69,25 +69,42 @@
       btn.innerText = 'রেজিস্টার হচ্ছে...';
 
       try {
-        const { data, error } = await sb.auth.signUp({
+        // ১. Supabase Auth-এ ইউজার সাইন-আপ করা
+        const { data: authData, error: authError } = await sb.auth.signUp({
           email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-              referral_code: referralCode || null
-            }
-          }
+          password
         });
 
-        if (error) {
-          showToast(error.message || 'রেজিস্টার ব্যর্থ', 'error');
+        if (authError) {
+          showToast(authError.message || 'রেজিস্টার ব্যর্থ', 'error');
           btn.disabled = false;
           btn.innerText = 'রেজিস্টার করুন';
           return;
         }
 
-        showToast('অ্যাকাউন্ট তৈরি হয়েছে!');
+        const user = authData.user;
+        if (user) {
+          // ২. সরাসরি profiles টেবিলে ইউজারের তথ্য (full_name সহ) ইনসার্ট করা
+          const { error: profileError } = await sb.from('profiles').insert([
+            {
+              id: user.id,
+              full_name: fullName,
+              coins: 0,
+              total_quizzes_submitted: 0,
+              is_admin: false
+            }
+          ]);
+
+          if (profileError) {
+            console.error('Profile creation error:', profileError);
+            showToast('প্রোফাইল তৈরি করতে সমস্যা হয়েছে: ' + profileError.message, 'error');
+            btn.disabled = false;
+            btn.innerText = 'রেজিস্টার করুন';
+            return;
+          }
+        }
+
+        showToast('অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!');
         setTimeout(() => window.location.href = 'home.html', 1000);
       } catch (err) {
         showToast('সমস্যা: ' + err.message, 'error');
