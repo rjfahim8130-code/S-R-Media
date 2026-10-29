@@ -6,6 +6,7 @@
   <title>হোম - NnowQuiz</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
 </head>
 <body>
   <div class="container page">
@@ -33,7 +34,7 @@
     <div class="card">
       <div class="card-title">কুইজ খেলুন</div>
       <p class="text-muted mb-3" style="font-size:0.9rem;">প্রবন্ধ পড়ে কুইজ দিয়ে পয়েন্ট জিতুন</p>
-      <button class="btn btn-primary" id="startQuizBtn" onclick="startQuiz()">কুইজ শুরু করুন</button>
+      <button class="btn btn-primary" id="startQuizBtn">কুইজ শুরু করুন</button>
       <p id="quizStatus" class="text-muted text-center mt-2" style="font-size:0.85rem;"></p>
     </div>
 
@@ -55,10 +56,8 @@
     <a href="profile.html" class="nav-item"><span class="icon">👤</span><span>প্রোফাইল</span></a>
   </div>
 
-  <script src="supabase.js"></script>
   <script>
     let profile = null;
-    let quizPaused = false;
 
     async function init() {
       const user = await requireAuth();
@@ -75,23 +74,19 @@
       document.getElementById('userPoints').innerText = formatNumber(profile.coins) + ' পয়েন্ট';
       document.getElementById('totalQuizzes').innerText = formatNumber(profile.total_quizzes_submitted);
 
-      const { data: settings } = await supabase.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
+      const { data: settings } = await sb.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
       if (settings && settings.value === 'true') {
-        quizPaused = true;
         document.getElementById('startQuizBtn').disabled = true;
         document.getElementById('startQuizBtn').innerText = 'কুইজ বর্তমানে বন্ধ';
         document.getElementById('quizStatus').innerText = 'অ্যাডমিন কুইজ পজ করেছেন';
       }
     }
 
-    async function startQuiz() {
-      if (quizPaused) {
-        showToast('কুইজ বর্তমানে বন্ধ আছে', 'warning');
-        return;
-      }
+    document.getElementById('startQuizBtn').addEventListener('click', async () => {
+      if (!profile) return;
 
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      const { data: recent } = await supabase
+      const { data: recent } = await sb
         .from('quiz_submissions')
         .select('id')
         .eq('user_id', profile.id)
@@ -103,7 +98,7 @@
       }
 
       window.location.href = 'quiz.html';
-    }
+    });
 
     init();
   </script>
