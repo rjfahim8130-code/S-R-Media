@@ -6,6 +6,7 @@
   <title>লগইন - NnowQuiz</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
 </head>
 <body>
   <div class="auth-wrapper">
@@ -31,7 +32,6 @@
     </div>
   </div>
 
-  <script src="supabase.js"></script>
   <script>
     (async () => {
       const user = await getCurrentUser();
@@ -41,23 +41,29 @@
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('loginBtn');
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value;
-
       btn.disabled = true;
       btn.innerText = 'লগইন হচ্ছে...';
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
 
-      if (error) {
-        showToast(error.message || 'লগইন ব্যর্থ', 'error');
+      try {
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+
+        if (error) {
+          showToast(error.message || 'লগইন ব্যর্থ', 'error');
+          btn.disabled = false;
+          btn.innerText = 'লগইন করুন';
+          return;
+        }
+
+        showToast('সফলভাবে লগইন হয়েছে!');
+        setTimeout(() => window.location.href = 'home.html', 800);
+      } catch (err) {
+        showToast('সমস্যা হয়েছে: ' + err.message, 'error');
         btn.disabled = false;
         btn.innerText = 'লগইন করুন';
-        return;
       }
-
-      showToast('সফলভাবে লগইন হয়েছে!');
-      setTimeout(() => window.location.href = 'home.html', 800);
     });
   </script>
 </body>
