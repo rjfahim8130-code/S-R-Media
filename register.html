@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>রেজিস্টার - NnowQuiz</title>
   <link rel="stylesheet" href="style.css">
-  <!-- Supabase CDN Script (এটি অবশ্যই থাকতে হবে) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
 </head>
 <body>
   <div class="auth-wrapper">
@@ -40,16 +40,12 @@
     </div>
   </div>
 
-  <script src="supabase.js"></script>
   <script>
     (async () => {
-      try {
-        const user = await getCurrentUser();
-        if (user) window.location.href = 'home.html';
-      } catch (e) {}
+      const user = await getCurrentUser();
+      if (user) window.location.href = 'home.html';
     })();
 
-    // URL থেকে রেফার কোড
     const urlParams = new URLSearchParams(window.location.search);
     const refFromUrl = urlParams.get('ref');
     if (refFromUrl) {
@@ -58,7 +54,6 @@
 
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-
       const btn = document.getElementById('registerBtn');
       const fullName = document.getElementById('fullName').value.trim();
       const email = document.getElementById('email').value.trim();
@@ -74,11 +69,9 @@
       btn.innerText = 'রেজিস্টার হচ্ছে...';
 
       try {
-        console.log('SignUp started...');
-
-        const { data, error } = await supabase.auth.signUp({
-          email: email,
-          password: password,
+        const { data, error } = await sb.auth.signUp({
+          email,
+          password,
           options: {
             data: {
               full_name: fullName,
@@ -87,30 +80,17 @@
           }
         });
 
-        console.log('SignUp response:', data, error);
-
         if (error) {
-          console.error('SignUp Error:', error);
-          showToast(error.message || 'রেজিস্টার ব্যর্থ হয়েছে', 'error');
+          showToast(error.message || 'রেজিস্টার ব্যর্থ', 'error');
           btn.disabled = false;
           btn.innerText = 'রেজিস্টার করুন';
           return;
         }
 
-        if (data?.user) {
-          showToast('অ্যাকাউন্ট তৈরি হয়েছে!');
-          setTimeout(() => {
-            window.location.href = 'home.html';
-          }, 1200);
-        } else {
-          showToast('কিছু সমস্যা হয়েছে, আবার চেষ্টা করুন', 'error');
-          btn.disabled = false;
-          btn.innerText = 'রেজিস্টার করুন';
-        }
-
+        showToast('অ্যাকাউন্ট তৈরি হয়েছে!');
+        setTimeout(() => window.location.href = 'home.html', 1000);
       } catch (err) {
-        console.error('Catch Error:', err);
-        showToast('নেটওয়ার্ক বা সার্ভার সমস্যা: ' + (err.message || err), 'error');
+        showToast('সমস্যা: ' + err.message, 'error');
         btn.disabled = false;
         btn.innerText = 'রেজিস্টার করুন';
       }
