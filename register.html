@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>রেজিস্টার - NnowQuiz</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -16,19 +16,20 @@
       <form id="registerForm">
         <div class="form-group">
           <label>আপনার নাম</label>
-          <input type="text" id="fullName" class="form-control" placeholder="পুরো নাম লিখুন" required>
+          <input type="text" id="fullName" class="form-control" placeholder="পুরো নাম" required>
         </div>
-
         <div class="form-group">
           <label>ইমেইল</label>
-          <input type="email" id="email" class="form-control" placeholder="আপনার ইমেইল লিখুন" required>
+          <input type="email" id="email" class="form-control" placeholder="ইমেইল" required>
         </div>
-
         <div class="form-group">
           <label>পাসওয়ার্ড</label>
           <input type="password" id="password" class="form-control" placeholder="কমপক্ষে ৬ অক্ষর" required minlength="6">
         </div>
-
+        <div class="form-group">
+          <label>রেফার কোড (অপশনাল)</label>
+          <input type="text" id="referralCode" class="form-control" placeholder="কেউ রেফার করে থাকলে কোড দিন">
+        </div>
         <button type="submit" class="btn btn-primary" id="registerBtn">রেজিস্টার করুন</button>
       </form>
 
@@ -45,12 +46,20 @@
       if (user) window.location.href = 'home.html';
     })();
 
+    // Auto fill referral from URL ?ref=CODE
+    const urlParams = new URLSearchParams(window.location.search);
+    const refFromUrl = urlParams.get('ref');
+    if (refFromUrl) {
+      document.getElementById('referralCode').value = refFromUrl.toUpperCase();
+    }
+
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('registerBtn');
       const fullName = document.getElementById('fullName').value.trim();
       const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value;
+      const referralCode = document.getElementById('referralCode').value.trim().toUpperCase();
 
       if (password.length < 6) {
         showToast('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে', 'error');
@@ -65,22 +74,21 @@
         password,
         options: {
           data: {
-            full_name: fullName
+            full_name: fullName,
+            referral_code: referralCode || null
           }
         }
       });
 
       if (error) {
-        showToast(error.message || 'রেজিস্টার ব্যর্থ হয়েছে', 'error');
+        showToast(error.message || 'রেজিস্টার ব্যর্থ', 'error');
         btn.disabled = false;
         btn.innerText = 'রেজিস্টার করুন';
         return;
       }
 
       showToast('অ্যাকাউন্ট তৈরি হয়েছে!');
-      setTimeout(() => {
-        window.location.href = 'home.html';
-      }, 1000);
+      setTimeout(() => window.location.href = 'home.html', 1000);
     });
   </script>
 </body>
