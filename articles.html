@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>প্রবন্ধসমূহ - NnowQuiz</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -23,27 +23,14 @@
     </div>
   </div>
 
-  <!-- Bottom Navigation -->
   <div class="bottom-nav">
-    <a href="home.html" class="nav-item">
-      <span class="icon">🏠</span>
-      <span>হোম</span>
-    </a>
-    <a href="articles.html" class="nav-item active">
-      <span class="icon">📚</span>
-      <span>প্রবন্ধ</span>
-    </a>
-    <a href="leaderboard.html" class="nav-item">
-      <span class="icon">🏆</span>
-      <span>র‍্যাঙ্ক</span>
-    </a>
-    <a href="profile.html" class="nav-item">
-      <span class="icon">👤</span>
-      <span>প্রোফাইল</span>
-    </a>
+    <a href="home.html" class="nav-item"><span class="icon">🏠</span><span>হোম</span></a>
+    <a href="articles.html" class="nav-item active"><span class="icon">📚</span><span>প্রবন্ধ</span></a>
+    <a href="leaderboard.html" class="nav-item"><span class="icon">🏆</span><span>র‍্যাঙ্ক</span></a>
+    <a href="profile.html" class="nav-item"><span class="icon">👤</span><span>প্রোফাইল</span></a>
   </div>
 
-  <script src="js/supabase.js"></script>
+  <script src="supabase.js"></script>
   <script>
     async function loadArticles() {
       const { data: articles, error } = await supabase
@@ -57,7 +44,7 @@
       if (error || !articles || articles.length === 0) {
         container.innerHTML = `
           <div class="empty-state">
-            <div class="icon">📭</div>
+            <div style="font-size:3rem;margin-bottom:12px;">📭</div>
             <p>এখনো কোনো প্রবন্ধ যোগ করা হয়নি</p>
           </div>
         `;
@@ -65,14 +52,14 @@
       }
 
       container.innerHTML = articles.map((article, index) => `
-        <a href="article.html?id=${article.id}" class="card" style="display:block; transition: transform 0.2s;">
-          <div style="display:flex; gap:14px; align-items:flex-start;">
-            <div style="width:42px; height:42px; background:linear-gradient(135deg,#6366f1,#8b5cf6); border-radius:12px; display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0;">
+        <a href="article.html?id=${article.id}" class="card" style="display:block;">
+          <div style="display:flex;gap:14px;align-items:flex-start;">
+            <div style="width:42px;height:42px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;">
               ${index + 1}
             </div>
             <div>
               <div class="card-title" style="margin-bottom:4px;">${article.title}</div>
-              <p class="text-muted" style="font-size:0.85rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">
+              <p class="text-muted" style="font-size:0.85rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
                 ${article.content.substring(0, 100)}...
               </p>
             </div>
