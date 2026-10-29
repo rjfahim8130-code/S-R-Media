@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>রেজাল্ট - NnowQuiz</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -14,13 +14,11 @@
     </div>
 
     <div id="resultContainer">
-      <div class="loading">
-        <div class="spinner"></div>
-      </div>
+      <div class="loading"><div class="spinner"></div></div>
     </div>
   </div>
 
-  <script src="js/supabase.js"></script>
+  <script src="supabase.js"></script>
   <script>
     async function showResult() {
       await requireAuth();
@@ -35,30 +33,20 @@
       sessionStorage.removeItem('quizResult');
 
       const percentage = Math.round((result.correct / result.total) * 100);
-      let message = '';
-      let emoji = '';
+      let message = '', emoji = '';
 
-      if (percentage >= 80) {
-        message = 'দারুণ করেছেন!';
-        emoji = '🔥';
-      } else if (percentage >= 60) {
-        message = 'ভালো হয়েছে!';
-        emoji = '👍';
-      } else if (percentage >= 40) {
-        message = 'আরও ভালো করতে পারবেন!';
-        emoji = '💪';
-      } else {
-        message = 'প্রবন্ধ আবার পড়ে চেষ্টা করুন!';
-        emoji = '📚';
-      }
+      if (percentage >= 80) { message = 'দারুণ করেছেন!'; emoji = '🔥'; }
+      else if (percentage >= 60) { message = 'ভালো হয়েছে!'; emoji = '👍'; }
+      else if (percentage >= 40) { message = 'আরও ভালো করতে পারবেন!'; emoji = '💪'; }
+      else { message = 'প্রবন্ধ আবার পড়ে চেষ্টা করুন!'; emoji = '📚'; }
 
       document.getElementById('resultContainer').innerHTML = `
-        <div class="card text-center" style="padding: 32px 20px;">
-          <div style="font-size: 4rem; margin-bottom: 12px;">${emoji}</div>
-          <h2 style="font-size: 1.5rem; margin-bottom: 8px;">${message}</h2>
+        <div class="card text-center" style="padding:32px 20px;">
+          <div style="font-size:4rem;margin-bottom:12px;">${emoji}</div>
+          <h2 style="font-size:1.5rem;margin-bottom:8px;">${message}</h2>
           <p class="text-muted mb-4">${result.articleTitle}</p>
 
-          <div class="stats-grid" style="margin-bottom: 24px;">
+          <div class="stats-grid" style="margin-bottom:24px;">
             <div class="stat-card">
               <div class="stat-value">\( {result.correct}/ \){result.total}</div>
               <div class="stat-label">সঠিক উত্তর</div>
@@ -70,7 +58,7 @@
           </div>
 
           <div class="progress-bar mb-3">
-            <div class="progress-fill" style="width: ${percentage}%;"></div>
+            <div class="progress-fill" style="width:${percentage}%;"></div>
           </div>
           <p class="text-muted mb-4">${percentage}% স্কোর</p>
 
