@@ -7,17 +7,50 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase.js"></script>
+  <style>
+    .question-card {
+      background: var(--dark-2);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .option-btn {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      background: var(--dark);
+      border: 2px solid var(--dark-3);
+      border-radius: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .option-btn.selected {
+      border-color: var(--primary);
+      background: rgba(99,102,241,0.15);
+    }
+    .option-label {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--dark-3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+  </style>
 </head>
 <body>
   <div class="container page">
     <div class="header">
       <button class="back-btn" onclick="if(confirm('কুইজ ছেড়ে যেতে চান?')) location.href='home.html'">←</button>
       <div class="logo">কুইজ</div>
-      <div id="quizProgress" class="badge badge-primary">১/৫</div>
-    </div>
-
-    <div class="progress-bar" style="height:8px;background:var(--dark-3);border-radius:20px;overflow:hidden;margin-bottom:16px;">
-      <div class="progress-fill" id="progressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#6366f1,#c084fc);border-radius:20px;transition:width 0.3s;"></div>
+      <div id="quizProgress" class="badge badge-primary">০/৫</div>
     </div>
 
     <!-- প্রবন্ধ সেকশন -->
@@ -29,14 +62,10 @@
       <button class="btn btn-primary" id="startQuestionsBtn" style="display:none;">প্রশ্নোত্তরে যান</button>
     </div>
 
-    <!-- প্রশ্ন সেকশন -->
+    <!-- প্রশ্ন সেকশন (সব এক পেজে) -->
     <div id="questionsSection" style="display:none;">
-      <div class="card">
-        <div id="questionNumber" style="font-size:0.85rem;color:var(--primary-light);font-weight:600;margin-bottom:8px;">প্রশ্ন ১</div>
-        <div id="questionText" style="font-size:1.1rem;font-weight:600;margin-bottom:20px;line-height:1.5;"></div>
-        <div id="optionsContainer"></div>
-      </div>
-      <button class="btn btn-primary" id="nextBtn" disabled>পরবর্তী প্রশ্ন</button>
+      <div id="allQuestions"></div>
+      <button class="btn btn-primary" id="submitBtn" disabled>কুইজ জমা দিন</button>
       <button class="btn btn-secondary mt-2" id="showArticleBtn">প্রবন্ধ আবার পড়ুন</button>
     </div>
 
@@ -45,8 +74,8 @@
       <div class="card" style="padding:30px 20px;">
         <div style="font-size:3.5rem;margin-bottom:12px;" id="resultEmoji">🎉</div>
         <h2 id="resultTitle" style="margin-bottom:8px;">দারুণ!</h2>
-        <p class="text-muted mb-3" id="resultText">আপনি ৫টার মধ্যে ৪টি সঠিক করেছেন</p>
-        <div style="font-size:2rem;font-weight:800;color:var(--primary);margin-bottom:20px;" id="coinsEarned">+৪০ কয়েন</div>
+        <p class="text-muted mb-3" id="resultText"></p>
+        <div style="font-size:2rem;font-weight:800;color:var(--primary);margin-bottom:20px;" id="coinsEarned"></div>
         <button class="btn btn-primary" onclick="location.href='home.html'">হোমে যান</button>
       </div>
     </div>
@@ -56,7 +85,6 @@
     let profile = null;
     let currentArticle = null;
     let questions = [];
-    let currentQ = 0;
     let answers = {};
     let currentSet = null;
 
@@ -64,10 +92,7 @@
       const user = await requireAuth();
       if (!user) return;
       profile = await getProfile();
-      if (!profile) {
-        showToast('প্রোফাইল লোড সমস্যা', 'error');
-        return;
-      }
+      if (!profile) return;
 
       const { data: pause } = await sb.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
       if (pause?.value === 'true') {
@@ -77,12 +102,7 @@
       }
 
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      const { data: recent } = await sb
-        .from('quiz_submissions')
-        .select('id')
-        .eq('user_id', profile.id)
-        .gte('submitted_at', twoHoursAgo);
-
+      const { data: recent } = await sb.from('quiz_submissions').select('id').eq('user_id', profile.id).gte('submitted_at', twoHoursAgo);
       if (recent && recent.length >= 8) {
         showToast('২ ঘণ্টায় সর্বোচ্চ ৮টি কুইজ দেওয়া যাবে', 'warning');
         setTimeout(() => location.href = 'home.html', 2000);
@@ -93,18 +113,16 @@
     }
 
     async function loadQuiz() {
-      // যেসব প্রবন্ধে প্রশ্ন আছে শুধু সেগুলো নেওয়া
-      const { data: articlesWithQuestions, error } = await sb
+      const { data: articlesWithQuestions } = await sb
         .from('questions')
         .select('article_id, articles(id, title, content, sort_order)')
         .not('article_id', 'is', null);
 
-      if (error || !articlesWithQuestions || articlesWithQuestions.length === 0) {
+      if (!articlesWithQuestions || articlesWithQuestions.length === 0) {
         document.getElementById('articleTitle').innerText = 'কোনো প্রবন্ধে প্রশ্ন নেই';
         return;
       }
 
-      // ইউনিক প্রবন্ধ বের করা
       const uniqueArticles = [];
       const seen = new Set();
       articlesWithQuestions.forEach(item => {
@@ -113,15 +131,8 @@
           uniqueArticles.push(item.articles);
         }
       });
-
       uniqueArticles.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-      if (uniqueArticles.length === 0) {
-        document.getElementById('articleTitle').innerText = 'কোনো প্রবন্ধে প্রশ্ন নেই';
-        return;
-      }
-
-      // রোটেশন
       const quizCount = profile.total_quizzes_submitted || 0;
       currentArticle = uniqueArticles[quizCount % uniqueArticles.length];
 
@@ -129,7 +140,6 @@
       document.getElementById('articleContent').innerText = currentArticle.content || '';
       document.getElementById('startQuestionsBtn').style.display = 'block';
 
-      // এই প্রবন্ধের প্রশ্ন লোড
       const { data: allQuestions } = await sb
         .from('questions')
         .select('*')
@@ -142,7 +152,6 @@
         return;
       }
 
-      // সেট অনুযায়ী গ্রুপ
       const sets = {};
       allQuestions.forEach(q => {
         const setName = q.category || 'set_1';
@@ -150,26 +159,17 @@
         sets[setName].push(q);
       });
 
-      const setNames = Object.keys(sets).sort((a, b) => {
-        return parseInt(a.replace('set_', '')) - parseInt(b.replace('set_', ''));
-      });
-
-      const setIndex = quizCount % setNames.length;
-      currentSet = setNames[setIndex];
+      const setNames = Object.keys(sets).sort((a, b) => parseInt(a.replace('set_', '')) - parseInt(b.replace('set_', '')));
+      currentSet = setNames[quizCount % setNames.length];
       questions = sets[currentSet].slice(0, 5);
 
-      if (questions.length === 0) {
-        document.getElementById('startQuestionsBtn').innerText = 'প্রশ্ন নেই';
-        document.getElementById('startQuestionsBtn').disabled = true;
-      }
+      document.getElementById('quizProgress').innerText = '০/' + questions.length;
     }
 
     document.getElementById('startQuestionsBtn').onclick = () => {
       document.getElementById('articleSection').style.display = 'none';
       document.getElementById('questionsSection').style.display = 'block';
-      currentQ = 0;
-      answers = {};
-      showQuestion();
+      renderAllQuestions();
     };
 
     document.getElementById('showArticleBtn').onclick = () => {
@@ -177,71 +177,71 @@
       document.getElementById('articleSection').style.display = 'block';
     };
 
-    function showQuestion() {
-      const q = questions[currentQ];
-      document.getElementById('questionNumber').innerText = `প্রশ্ন ${currentQ + 1} / ${questions.length}`;
-      document.getElementById('questionText').innerText = q.question_text;
-      document.getElementById('quizProgress').innerText = `\( {currentQ + 1}/ \){questions.length}`;
-      document.getElementById('progressFill').style.width = `${((currentQ + 1) / questions.length) * 100}%`;
-
-      const options = q.options || [];
+    function renderAllQuestions() {
+      const container = document.getElementById('allQuestions');
       const labels = ['A', 'B', 'C', 'D'];
+      let html = '';
 
-      document.getElementById('optionsContainer').innerHTML = options.map((opt, idx) => `
-        <div class="option ${answers[currentQ] === idx ? 'selected' : ''}" 
-             onclick="selectOption(${idx})"
-             style="display:flex;gap:12px;align-items:center;padding:14px;background:var(--dark);border:2px solid ${answers[currentQ] === idx ? 'var(--primary)' : 'var(--dark-3)'};border-radius:12px;margin-bottom:10px;cursor:pointer;">
-          <div style="width:32px;height:32px;border-radius:50%;background:var(--dark-3);display:flex;align-items:center;justify-content:center;font-weight:700;">${labels[idx]}</div>
-          <div>${opt}</div>
-        </div>
-      `).join('');
+      questions.forEach((q, qIndex) => {
+        html += '<div class="question-card">';
+        html += '<div style="font-size:0.85rem;color:var(--primary-light);font-weight:600;margin-bottom:6px;">প্রশ্ন ' + (qIndex + 1) + ' / ' + questions.length + '</div>';
+        html += '<div style="font-size:1.05rem;font-weight:600;margin-bottom:14px;line-height:1.5;">' + q.question_text + '</div>';
 
-      const btn = document.getElementById('nextBtn');
-      btn.innerText = currentQ === questions.length - 1 ? 'কুইজ জমা দিন' : 'পরবর্তী প্রশ্ন';
-      btn.disabled = answers[currentQ] === undefined;
+        (q.options || []).forEach((opt, idx) => {
+          const selected = answers[qIndex] === idx ? 'selected' : '';
+          html += '<div class="option-btn ' + selected + '" onclick="selectOption(' + qIndex + ',' + idx + ')">';
+          html += '<div class="option-label">' + labels[idx] + '</div>';
+          html += '<div>' + opt + '</div>';
+          html += '</div>';
+        });
+
+        html += '</div>';
+      });
+
+      container.innerHTML = html;
+      updateProgress();
     }
 
-    window.selectOption = (idx) => {
-      answers[currentQ] = idx;
-      showQuestion();
+    window.selectOption = (qIndex, optIndex) => {
+      answers[qIndex] = optIndex;
+      renderAllQuestions();
     };
 
-    document.getElementById('nextBtn').onclick = async () => {
-      if (answers[currentQ] === undefined) return;
+    function updateProgress() {
+      const answered = Object.keys(answers).length;
+      document.getElementById('quizProgress').innerText = answered + '/' + questions.length;
+      document.getElementById('submitBtn').disabled = answered < questions.length;
+    }
 
-      if (currentQ < questions.length - 1) {
-        currentQ++;
-        showQuestion();
-      } else {
-        let correct = 0;
-        questions.forEach((q, i) => {
-          if (answers[i] === q.correct_answer) correct++;
-        });
+    document.getElementById('submitBtn').onclick = async () => {
+      let correct = 0;
+      questions.forEach((q, i) => {
+        if (answers[i] === q.correct_answer) correct++;
+      });
 
-        const coins = correct * 10;
+      const coins = correct * 10;
 
-        await sb.from('quiz_submissions').insert({
-          user_id: profile.id,
-          article_id: currentArticle.id,
-          set_number: parseInt((currentSet || 'set_1').replace('set_', '')) || 1,
-          score: correct,
-          coins_earned: coins
-        });
+      await sb.from('quiz_submissions').insert({
+        user_id: profile.id,
+        article_id: currentArticle.id,
+        set_number: parseInt((currentSet || 'set_1').replace('set_', '')) || 1,
+        score: correct,
+        coins_earned: coins
+      });
 
-        await sb.from('profiles').update({
-          coins: (profile.coins || 0) + coins,
-          total_quizzes_submitted: (profile.total_quizzes_submitted || 0) + 1,
-          last_quiz_at: new Date().toISOString()
-        }).eq('id', profile.id);
+      await sb.from('profiles').update({
+        coins: (profile.coins || 0) + coins,
+        total_quizzes_submitted: (profile.total_quizzes_submitted || 0) + 1,
+        last_quiz_at: new Date().toISOString()
+      }).eq('id', profile.id);
 
-        document.getElementById('questionsSection').style.display = 'none';
-        document.getElementById('resultSection').style.display = 'block';
+      document.getElementById('questionsSection').style.display = 'none';
+      document.getElementById('resultSection').style.display = 'block';
 
-        document.getElementById('resultEmoji').innerText = correct >= 4 ? '🎉' : correct >= 2 ? '👍' : '💪';
-        document.getElementById('resultTitle').innerText = correct >= 4 ? 'দারুণ!' : correct >= 2 ? 'ভালো করেছেন!' : 'আবার চেষ্টা করুন!';
-        document.getElementById('resultText').innerText = `আপনি ${questions.length}টির মধ্যে ${correct}টি সঠিক করেছেন`;
-        document.getElementById('coinsEarned').innerText = `+${coins} কয়েন`;
-      }
+      document.getElementById('resultEmoji').innerText = correct >= 4 ? '🎉' : correct >= 2 ? '👍' : '💪';
+      document.getElementById('resultTitle').innerText = correct >= 4 ? 'দারুণ!' : correct >= 2 ? 'ভালো করেছেন!' : 'আবার চেষ্টা করুন!';
+      document.getElementById('resultText').innerText = 'আপনি ' + questions.length + 'টির মধ্যে ' + correct + 'টি সঠিক করেছেন';
+      document.getElementById('coinsEarned').innerText = '+' + coins + ' কয়েন';
     };
 
     init();
