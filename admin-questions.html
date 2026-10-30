@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>প্রশ্ন ম্যানেজ - NnowQuiz</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+</head>
+<body>
+  <div class="container page">
+    <div class="header">
+      <button class="back-btn" onclick="location.href='admin-panel.html'">←</button>
+      <div class="logo">প্রশ্ন ম্যানেজ</div>
+      <div style="width:40px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">নতুন প্রশ্ন যোগ করুন</div>
+      
+      <div class="form-group">
+        <label>প্রবন্ধ সিলেক্ট করুন</label>
+        <select id="articleId" class="form-control"></select>
+      </div>
+
+      <div class="form-group">
+        <label>সেট নম্বর (১, ২ বা ৩)</label>
+        <input type="number" id="setNumber" class="form-control" value="1" min="1" max="3">
+      </div>
+
+      <div class="form-group">
+        <label>প্রশ্ন</label>
+        <textarea id="questionText" class="form-control" rows="3" placeholder="প্রশ্ন লিখুন"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>অপশন A</label>
+        <input type="text" id="optionA" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>অপশন B</label>
+        <input type="text" id="optionB" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>অপশন C</label>
+        <input type="text" id="optionC" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>অপশন D</label>
+        <input type="text" id="optionD" class="form-control">
+      </div>
+
+      <div class="form-group">
+        <label>সঠিক উত্তর</label>
+        <select id="correctOption" class="form-control">
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+          <option value="D">D</option>
+        </select>
+      </div>
+
+      <button class="btn btn-primary" id="addQuestionBtn">প্রশ্ন যোগ করুন</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">বিদ্যমান প্রশ্নসমূহ</div>
+      <div id="questionsList">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function init() {
+      await requireAdmin();
+      await loadArticles();
+      loadQuestions();
+    }
+
+    async function loadArticles() {
+      const { data } = await sb.from('articles').select('id, title').eq('is_active', true).order('sort_order');
+      const select = document.getElementById('articleId');
+      select.innerHTML = data && data.length 
+        ? data.map(a => `<option value="\( {a.id}"> \){a.title}</option>`).join('')
+        : '<option value="">কোনো প্রবন্ধ নেই</option>';
+    }
+
+    async function loadQuestions() {
+      const { data, error } = await sb
+        .from('questions')
+        .select('*, articles(title)')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const container = document.getElementById('questionsList');
+
+      if (error || !data || data.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">কোনো প্রশ্ন নেই</p>';
+        return;
+      }
+
+      container.innerHTML = data.map(q => `
+        <div style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
+          <div style="font-weight:600;margin-bottom:4px;">${q.question_text}</div>
+          <div class="text-muted" style="font-size:0.85rem;margin-bottom:6px;">
+            প্রবন্ধ: ${q.articles?.title || 'অজানা'} • সেট: ${q.set_number} • সঠিক: ${q.correct_option}
+          </div>
+          <button class="btn btn-sm btn-danger" onclick="deleteQuestion('${q.id}')">ডিলিট</button>
+        </div>
+      `).join('');
+    }
+
+    document.getElementById('addQuestionBtn').onclick = async () => {
+      const articleId = document.getElementById('articleId').value;
+      const setNumber = parseInt(document.getElementById('setNumber').value) || 1;
+      const questionText = document.getElementById('questionText').value.trim();
+      const optionA = document.getElementById('optionA').value.trim();
+      const optionB = document.getElementById('optionB').value.trim();
+      const optionC = document.getElementById('optionC').value.trim();
+      const optionD = document.getElementById('optionD').value.trim();
+      const correctOption = document.getElementById('correctOption').value;
+
+      if (!articleId || !questionText || !optionA || !optionB || !optionC || !optionD) {
+        showToast('সব ঘর পূরণ করুন', 'error');
+        return;
+      }
+
+      const { error } = await sb.from('questions').insert({
+        article_id: articleId,
+        set_number: setNumber,
+        question_text: questionText,
+        option_a: optionA,
+        option_b: optionB,
+        option_c: optionC,
+        option_d: optionD,
+        correct_option: correctOption
+      });
+
+      if (error) {
+        showToast('যোগ করতে সমস্যা: ' + error.message, 'error');
+        return;
+      }
+
+      showToast('প্রশ্ন যোগ হয়েছে!');
+      document.getElementById('questionText').value = '';
+      document.getElementById('optionA').value = '';
+      document.getElementById('optionB').value = '';
+      document.getElementById('optionC').value = '';
+      document.getElementById('optionD').value = '';
+      loadQuestions();
+    };
+
+    async function deleteQuestion(id) {
+      if (!confirm('এই প্রশ্ন ডিলিট করতে চান?')) return;
+      await sb.from('questions').delete().eq('id', id);
+      showToast('প্রশ্ন ডিলিট হয়েছে');
+      loadQuestions();
+    }
+
+    init();
+  </script>
+</body>
+</html>
