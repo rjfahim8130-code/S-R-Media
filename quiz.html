@@ -36,7 +36,6 @@
         <div id="questionText" style="font-size:1.1rem;font-weight:600;margin-bottom:20px;line-height:1.5;"></div>
         <div id="optionsContainer"></div>
       </div>
-
       <button class="btn btn-primary" id="nextBtn" disabled>পরবর্তী প্রশ্ন</button>
       <button class="btn btn-secondary mt-2" id="showArticleBtn">প্রবন্ধ আবার পড়ুন</button>
     </div>
@@ -58,7 +57,7 @@
     let currentArticle = null;
     let questions = [];
     let currentQ = 0;
-    let answers = {};          // index → selected option index (0-3)
+    let answers = {};
     let currentSet = null;
 
     async function init() {
@@ -70,7 +69,6 @@
         return;
       }
 
-      // কুইজ পজ চেক
       const { data: pause } = await sb.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
       if (pause?.value === 'true') {
         showToast('কুইজ বর্তমানে বন্ধ আছে', 'error');
@@ -78,7 +76,6 @@
         return;
       }
 
-      // দৈনিক/কুলডাউন লিমিট চেক (৮টি কুইজ)
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
       const { data: recent } = await sb
         .from('quiz_submissions')
@@ -87,7 +84,7 @@
         .gte('submitted_at', twoHoursAgo);
 
       if (recent && recent.length >= 8) {
-        showToast('২ ঘণ্টায় সর্বোচ্চ ৮টি কুইজ দেওয়া যাবে। পরে আবার চেষ্টা করুন।', 'warning');
+        showToast('২ ঘণ্টায় সর্বোচ্চ ৮টি কুইজ দেওয়া যাবে', 'warning');
         setTimeout(() => location.href = 'home.html', 2000);
         return;
       }
@@ -96,21 +93,37 @@
     }
 
     async function loadQuiz() {
-      // সক্রিয় প্রবন্ধ লোড
-      const { data: articles, error } = await sb
-        .from('articles')
-        .select('*')
-        .eq('is_active', true)
-        .order('sort_order');
+      // যেসব প্রবন্ধে প্রশ্ন আছে শুধু সেগুলো নেওয়া
+      const { data: articlesWithQuestions, error } = await sb
+        .from('questions')
+        .select('article_id, articles(id, title, content, sort_order)')
+        .not('article_id', 'is', null);
 
-      if (error || !articles || articles.length === 0) {
-        document.getElementById('articleTitle').innerText = 'কোনো প্রবন্ধ নেই';
+      if (error || !articlesWithQuestions || articlesWithQuestions.length === 0) {
+        document.getElementById('articleTitle').innerText = 'কোনো প্রবন্ধে প্রশ্ন নেই';
         return;
       }
 
-      // সহজ রোটেশন: ইউজার যতগুলো কুইজ দিয়েছে তার উপর ভিত্তি করে প্রবন্ধ বাছাই
+      // ইউনিক প্রবন্ধ বের করা
+      const uniqueArticles = [];
+      const seen = new Set();
+      articlesWithQuestions.forEach(item => {
+        if (item.articles && !seen.has(item.articles.id)) {
+          seen.add(item.articles.id);
+          uniqueArticles.push(item.articles);
+        }
+      });
+
+      uniqueArticles.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+      if (uniqueArticles.length === 0) {
+        document.getElementById('articleTitle').innerText = 'কোনো প্রবন্ধে প্রশ্ন নেই';
+        return;
+      }
+
+      // রোটেশন
       const quizCount = profile.total_quizzes_submitted || 0;
-      currentArticle = articles[quizCount % articles.length];
+      currentArticle = uniqueArticles[quizCount % uniqueArticles.length];
 
       document.getElementById('articleTitle').innerText = currentArticle.title;
       document.getElementById('articleContent').innerText = currentArticle.content || '';
@@ -129,7 +142,7 @@
         return;
       }
 
-      // সেট অনুযায়ী গ্রুপ করা
+      // সেট অনুযায়ী গ্রুপ
       const sets = {};
       allQuestions.forEach(q => {
         const setName = q.category || 'set_1';
@@ -141,10 +154,9 @@
         return parseInt(a.replace('set_', '')) - parseInt(b.replace('set_', ''));
       });
 
-      // পরবর্তী সেট বাছাই (রোটেশন)
       const setIndex = quizCount % setNames.length;
       currentSet = setNames[setIndex];
-      questions = sets[currentSet].slice(0, 5); // সর্বদা সর্বোচ্চ ৫টি
+      questions = sets[currentSet].slice(0, 5);
 
       if (questions.length === 0) {
         document.getElementById('startQuestionsBtn').innerText = 'প্রশ্ন নেই';
@@ -152,7 +164,6 @@
       }
     }
 
-    // প্রশ্নোত্তর শুরু
     document.getElementById('startQuestionsBtn').onclick = () => {
       document.getElementById('articleSection').style.display = 'none';
       document.getElementById('questionsSection').style.display = 'block';
@@ -161,7 +172,6 @@
       showQuestion();
     };
 
-    // প্রবন্ধ আবার দেখানো
     document.getElementById('showArticleBtn').onclick = () => {
       document.getElementById('questionsSection').style.display = 'none';
       document.getElementById('articleSection').style.display = 'block';
@@ -203,7 +213,6 @@
         currentQ++;
         showQuestion();
       } else {
-        // জমা দেওয়া
         let correct = 0;
         questions.forEach((q, i) => {
           if (answers[i] === q.correct_answer) correct++;
@@ -211,23 +220,20 @@
 
         const coins = correct * 10;
 
-        // সাবমিশন সেভ
         await sb.from('quiz_submissions').insert({
           user_id: profile.id,
           article_id: currentArticle.id,
-          set_number: parseInt(currentSet.replace('set_', '')) || 1,
+          set_number: parseInt((currentSet || 'set_1').replace('set_', '')) || 1,
           score: correct,
           coins_earned: coins
         });
 
-        // প্রোফাইল আপডেট
         await sb.from('profiles').update({
           coins: (profile.coins || 0) + coins,
           total_quizzes_submitted: (profile.total_quizzes_submitted || 0) + 1,
           last_quiz_at: new Date().toISOString()
         }).eq('id', profile.id);
 
-        // রেজাল্ট দেখানো
         document.getElementById('questionsSection').style.display = 'none';
         document.getElementById('resultSection').style.display = 'block';
 
