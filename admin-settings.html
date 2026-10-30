@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>সেটিংস - NnowQuiz</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+</head>
+<body>
+  <div class="container page">
+    <div class="header">
+      <button class="back-btn" onclick="location.href='admin-panel.html'">←</button>
+      <div class="logo">সেটিংস</div>
+      <div style="width:40px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">কুইজ পজ/চালু</div>
+      <p id="statusText" class="mb-3">লোড হচ্ছে...</p>
+      <button class="btn" id="toggleBtn">লোড হচ্ছে...</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">দ্রুত লিংক</div>
+      <a href="admin-panel.html" class="btn btn-secondary mb-2">এডমিন হোমে যান</a>
+      <a href="home.html" class="btn btn-outline">ইউজার সাইটে যান</a>
+    </div>
+  </div>
+
+  <script>
+    async function init() {
+      await requireAdmin();
+
+      const { data } = await sb.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
+      const isPaused = data?.value === 'true';
+
+      document.getElementById('statusText').innerText = isPaused 
+        ? 'বর্তমান স্ট্যাটাস: কুইজ বন্ধ আছে' 
+        : 'বর্তমান স্ট্যাটাস: কুইজ চালু আছে';
+
+      const btn = document.getElementById('toggleBtn');
+      btn.innerText = isPaused ? 'কুইজ চালু করুন' : 'কুইজ বন্ধ করুন';
+      btn.className = isPaused ? 'btn btn-success' : 'btn btn-danger';
+
+      btn.onclick = async () => {
+        const newValue = isPaused ? 'false' : 'true';
+        await sb.from('app_settings').upsert({ key: 'quiz_paused', value: newValue });
+        showToast(isPaused ? 'কুইজ চালু করা হয়েছে' : 'কুইজ বন্ধ করা হয়েছে');
+        setTimeout(() => location.reload(), 800);
+      };
+    }
+
+    init();
+  </script>
+</body>
+</html>
