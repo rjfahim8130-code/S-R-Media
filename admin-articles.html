@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>প্রবন্ধ ম্যানেজ - NnowQuiz</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+</head>
+<body>
+  <div class="container page">
+    <div class="header">
+      <button class="back-btn" onclick="location.href='admin-panel.html'">←</button>
+      <div class="logo">প্রবন্ধ ম্যানেজ</div>
+      <div style="width:40px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">নতুন প্রবন্ধ যোগ করুন</div>
+      <div class="form-group">
+        <label>প্রবন্ধের শিরোনাম</label>
+        <input type="text" id="title" class="form-control" placeholder="শিরোনাম লিখুন">
+      </div>
+      <div class="form-group">
+        <label>প্রবন্ধের বিষয়বস্তু</label>
+        <textarea id="content" class="form-control" rows="8" placeholder="প্রবন্ধ লিখুন..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>সর্ট অর্ডার (ছোট সংখ্যা আগে দেখাবে)</label>
+        <input type="number" id="sortOrder" class="form-control" value="1">
+      </div>
+      <button class="btn btn-primary" id="addBtn">প্রবন্ধ যোগ করুন</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">সব প্রবন্ধ</div>
+      <div id="articlesList">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function init() {
+      await requireAdmin();
+      loadArticles();
+    }
+
+    async function loadArticles() {
+      const { data, error } = await sb.from('articles').select('*').order('sort_order');
+      const container = document.getElementById('articlesList');
+
+      if (error || !data || data.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">কোনো প্রবন্ধ নেই</p>';
+        return;
+      }
+
+      container.innerHTML = data.map(a => `
+        <div style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
+          <div style="font-weight:600;margin-bottom:4px;">${a.title}</div>
+          <div class="text-muted" style="font-size:0.85rem;margin-bottom:8px;">
+            ${a.is_active ? '✅ সক্রিয়' : '❌ নিষ্ক্রিয়'} • অর্ডার: ${a.sort_order}
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm btn-secondary" onclick="toggleActive('${a.id}', ${a.is_active})">
+              ${a.is_active ? 'নিষ্ক্রিয় করুন' : 'সক্রিয় করুন'}
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="deleteArticle('${a.id}')">ডিলিট</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    document.getElementById('addBtn').onclick = async () => {
+      const title = document.getElementById('title').value.trim();
+      const content = document.getElementById('content').value.trim();
+      const sortOrder = parseInt(document.getElementById('sortOrder').value) || 1;
+
+      if (!title || !content) {
+        showToast('শিরোনাম ও বিষয়বস্তু আবশ্যক', 'error');
+        return;
+      }
+
+      const { error } = await sb.from('articles').insert({
+        title,
+        content,
+        sort_order: sortOrder,
+        is_active: true
+      });
+
+      if (error) {
+        showToast('যোগ করতে সমস্যা: ' + error.message, 'error');
+        return;
+      }
+
+      showToast('প্রবন্ধ যোগ হয়েছে!');
+      document.getElementById('title').value = '';
+      document.getElementById('content').value = '';
+      loadArticles();
+    };
+
+    async function toggleActive(id, current) {
+      await sb.from('articles').update({ is_active: !current }).eq('id', id);
+      showToast('স্ট্যাটাস পরিবর্তন হয়েছে');
+      loadArticles();
+    }
+
+    async function deleteArticle(id) {
+      if (!confirm('এই প্রবন্ধ ডিলিট করতে চান?')) return;
+      await sb.from('articles').delete().eq('id', id);
+      showToast('প্রবন্ধ ডিলিট হয়েছে');
+      loadArticles();
+    }
+
+    init();
+  </script>
+</body>
+  </html>
