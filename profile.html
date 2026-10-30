@@ -49,9 +49,9 @@
 
       const referralLink = window.location.origin + '/register.html?ref=' + (currentProfile.referral_code || '');
 
-      // Admin button
+      // Admin button updated link
       const adminButton = currentProfile.is_admin 
-        ? `<a href="admin/index.html" class="btn btn-primary mb-3">এডমিন প্যানেল</a>` 
+        ? `<a href="admin-panel.html" class="btn btn-primary mb-3">এডমিন প্যানেল</a>` 
         : '';
 
       document.getElementById('profileBox').innerHTML = `
