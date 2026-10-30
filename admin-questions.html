@@ -7,6 +7,27 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase.js"></script>
+  <style>
+    .question-block {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .question-block h4 {
+      margin: 0 0 12px;
+      font-size: 0.95rem;
+      color: var(--primary);
+    }
+    .set-info {
+      background: linear-gradient(135deg, #312e81, #1e1b4b);
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      font-size: 0.95rem;
+    }
+  </style>
 </head>
 <body>
   <div class="container page">
@@ -16,147 +37,226 @@
       <div style="width:40px;"></div>
     </div>
 
+    <!-- প্রবন্ধ সিলেক্ট -->
     <div class="card">
-      <div class="card-title">নতুন প্রশ্ন যোগ করুন</div>
-      
-      <div class="form-group">
-        <label>প্রবন্ধ সিলেক্ট করুন</label>
-        <select id="articleId" class="form-control"></select>
-      </div>
-
-      <div class="form-group">
-        <label>সেট নম্বর (১, ২ বা ৩)</label>
-        <input type="number" id="setNumber" class="form-control" value="1" min="1" max="3">
-      </div>
-
-      <div class="form-group">
-        <label>প্রশ্ন</label>
-        <textarea id="questionText" class="form-control" rows="3" placeholder="প্রশ্ন লিখুন"></textarea>
-      </div>
-
-      <div class="form-group">
-        <label>অপশন A</label>
-        <input type="text" id="optionA" class="form-control">
-      </div>
-      <div class="form-group">
-        <label>অপশন B</label>
-        <input type="text" id="optionB" class="form-control">
-      </div>
-      <div class="form-group">
-        <label>অপশন C</label>
-        <input type="text" id="optionC" class="form-control">
-      </div>
-      <div class="form-group">
-        <label>অপশন D</label>
-        <input type="text" id="optionD" class="form-control">
-      </div>
-
-      <div class="form-group">
-        <label>সঠিক উত্তর</label>
-        <select id="correctOption" class="form-control">
-          <option value="A">A</option>
-          <option value="B">B</option>
-          <option value="C">C</option>
-          <option value="D">D</option>
-        </select>
-      </div>
-
-      <button class="btn btn-primary" id="addQuestionBtn">প্রশ্ন যোগ করুন</button>
+      <div class="card-title">প্রবন্ধ সিলেক্ট করুন</div>
+      <select id="articleSelect" class="form-control" onchange="onArticleChange()">
+        <option value="">প্রবন্ধ বাছাই করুন</option>
+      </select>
+      <div id="setInfo" class="set-info" style="display:none;margin-top:12px;"></div>
     </div>
 
+    <!-- ৫টি প্রশ্ন একসাথে -->
+    <div class="card" id="questionsForm" style="display:none;">
+      <div class="card-title">নতুন সেট যোগ করুন (৫টি প্রশ্ন)</div>
+
+      <div id="questionsContainer"></div>
+
+      <button class="btn btn-primary" id="saveSetBtn" style="margin-top:8px;">
+        এই সেট সেভ করুন
+      </button>
+    </div>
+
+    <!-- বিদ্যমান সেট -->
     <div class="card">
-      <div class="card-title">বিদ্যমান প্রশ্নসমূহ</div>
-      <div id="questionsList">
-        <div class="loading"><div class="spinner"></div></div>
+      <div class="card-title">বিদ্যমান সেটসমূহ</div>
+      <div id="existingSets">
+        <p class="text-muted text-center">প্রথমে প্রবন্ধ সিলেক্ট করুন</p>
       </div>
     </div>
   </div>
 
   <script>
+    let selectedArticleId = null;
+    let nextSetNumber = 1;
+
     async function init() {
       await requireAdmin();
       await loadArticles();
-      loadQuestions();
     }
 
     async function loadArticles() {
-      const { data } = await sb.from('articles').select('id, title').eq('is_active', true).order('sort_order');
-      const select = document.getElementById('articleId');
-      select.innerHTML = data && data.length 
-        ? data.map(a => `<option value="\( {a.id}"> \){a.title}</option>`).join('')
-        : '<option value="">কোনো প্রবন্ধ নেই</option>';
+      const { data } = await sb
+        .from('articles')
+        .select('id, title')
+        .eq('is_active', true)
+        .order('sort_order');
+
+      const select = document.getElementById('articleSelect');
+      if (!data || data.length === 0) {
+        select.innerHTML = '<option value="">কোনো প্রবন্ধ নেই</option>';
+        return;
+      }
+
+      select.innerHTML = '<option value="">প্রবন্ধ বাছাই করুন</option>' +
+        data.map(a => `<option value="\( {a.id}"> \){a.title}</option>`).join('');
     }
 
-    async function loadQuestions() {
-      const { data, error } = await sb
+    async function onArticleChange() {
+      selectedArticleId = document.getElementById('articleSelect').value;
+      const form = document.getElementById('questionsForm');
+      const setInfo = document.getElementById('setInfo');
+
+      if (!selectedArticleId) {
+        form.style.display = 'none';
+        setInfo.style.display = 'none';
+        document.getElementById('existingSets').innerHTML = '<p class="text-muted text-center">প্রথমে প্রবন্ধ সিলেক্ট করুন</p>';
+        return;
+      }
+
+      // পরবর্তী সেট নম্বর বের করা
+      const { data: existing } = await sb
         .from('questions')
-        .select('*, articles(title)')
-        .order('created_at', { ascending: false })
-        .limit(50);
+        .select('category')
+        .eq('article_id', selectedArticleId);
 
-      const container = document.getElementById('questionsList');
-
-      if (error || !data || data.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center">কোনো প্রশ্ন নেই</p>';
-        return;
+      let maxSet = 0;
+      if (existing && existing.length > 0) {
+        existing.forEach(q => {
+          const num = parseInt(q.category?.replace('set_', '') || 0);
+          if (num > maxSet) maxSet = num;
+        });
       }
+      nextSetNumber = maxSet + 1;
 
-      container.innerHTML = data.map(q => `
-        <div style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
-          <div style="font-weight:600;margin-bottom:4px;">${q.question_text}</div>
-          <div class="text-muted" style="font-size:0.85rem;margin-bottom:6px;">
-            প্রবন্ধ: ${q.articles?.title || 'অজানা'} • সেট: ${q.set_number} • সঠিক: ${q.correct_option}
-          </div>
-          <button class="btn btn-sm btn-danger" onclick="deleteQuestion('${q.id}')">ডিলিট</button>
-        </div>
-      `).join('');
+      setInfo.style.display = 'block';
+      setInfo.innerHTML = `পরবর্তী সেট নম্বর: <strong>সেট ${nextSetNumber}</strong> (অটো)`;
+
+      form.style.display = 'block';
+      renderQuestionForms();
+      loadExistingSets();
     }
 
-    document.getElementById('addQuestionBtn').onclick = async () => {
-      const articleId = document.getElementById('articleId').value;
-      const setNumber = parseInt(document.getElementById('setNumber').value) || 1;
-      const questionText = document.getElementById('questionText').value.trim();
-      const optionA = document.getElementById('optionA').value.trim();
-      const optionB = document.getElementById('optionB').value.trim();
-      const optionC = document.getElementById('optionC').value.trim();
-      const optionD = document.getElementById('optionD').value.trim();
-      const correctOption = document.getElementById('correctOption').value;
+    function renderQuestionForms() {
+      const container = document.getElementById('questionsContainer');
+      let html = '';
 
-      if (!articleId || !questionText || !optionA || !optionB || !optionC || !optionD) {
-        showToast('সব ঘর পূরণ করুন', 'error');
+      for (let i = 1; i <= 5; i++) {
+        html += `
+          <div class="question-block">
+            <h4>প্রশ্ন ${i}</h4>
+            <div class="form-group">
+              <label>প্রশ্ন</label>
+              <textarea id="q${i}_text" class="form-control" rows="2" placeholder="প্রশ্ন লিখুন"></textarea>
+            </div>
+            <div class="form-group">
+              <label>অপশন A</label>
+              <input type="text" id="q${i}_a" class="form-control" placeholder="অপশন A">
+            </div>
+            <div class="form-group">
+              <label>অপশন B</label>
+              <input type="text" id="q${i}_b" class="form-control" placeholder="অপশন B">
+            </div>
+            <div class="form-group">
+              <label>অপশন C</label>
+              <input type="text" id="q${i}_c" class="form-control" placeholder="অপশন C">
+            </div>
+            <div class="form-group">
+              <label>অপশন D</label>
+              <input type="text" id="q${i}_d" class="form-control" placeholder="অপশন D">
+            </div>
+            <div class="form-group">
+              <label>সঠিক উত্তর</label>
+              <select id="q${i}_correct" class="form-control">
+                <option value="0">A</option>
+                <option value="1">B</option>
+                <option value="2">C</option>
+                <option value="3">D</option>
+              </select>
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    }
+
+    document.getElementById('saveSetBtn').onclick = async () => {
+      if (!selectedArticleId) {
+        showToast('প্রথমে প্রবন্ধ সিলেক্ট করুন', 'error');
         return;
       }
 
-      const { error } = await sb.from('questions').insert({
-        article_id: articleId,
-        set_number: setNumber,
-        question_text: questionText,
-        option_a: optionA,
-        option_b: optionB,
-        option_c: optionC,
-        option_d: optionD,
-        correct_option: correctOption
-      });
+      const questions = [];
+
+      for (let i = 1; i <= 5; i++) {
+        const text = document.getElementById(`q${i}_text`).value.trim();
+        const a = document.getElementById(`q${i}_a`).value.trim();
+        const b = document.getElementById(`q${i}_b`).value.trim();
+        const c = document.getElementById(`q${i}_c`).value.trim();
+        const d = document.getElementById(`q${i}_d`).value.trim();
+        const correct = parseInt(document.getElementById(`q${i}_correct`).value);
+
+        if (!text || !a || !b || !c || !d) {
+          showToast(`প্রশ্ন ${i} এর সব ঘর পূরণ করুন`, 'error');
+          return;
+        }
+
+        questions.push({
+          article_id: parseInt(selectedArticleId),
+          question_text: text,
+          options: [a, b, c, d],
+          correct_answer: correct,
+          category: `set_${nextSetNumber}`
+        });
+      }
+
+      const { error } = await sb.from('questions').insert(questions);
 
       if (error) {
-        showToast('যোগ করতে সমস্যা: ' + error.message, 'error');
+        showToast('সেভ করতে সমস্যা: ' + error.message, 'error');
         return;
       }
 
-      showToast('প্রশ্ন যোগ হয়েছে!');
-      document.getElementById('questionText').value = '';
-      document.getElementById('optionA').value = '';
-      document.getElementById('optionB').value = '';
-      document.getElementById('optionC').value = '';
-      document.getElementById('optionD').value = '';
-      loadQuestions();
+      showToast(`সেট ${nextSetNumber} সফলভাবে যোগ হয়েছে!`);
+      
+      // ফর্ম ক্লিয়ার
+      for (let i = 1; i <= 5; i++) {
+        document.getElementById(`q${i}_text`).value = '';
+        document.getElementById(`q${i}_a`).value = '';
+        document.getElementById(`q${i}_b`).value = '';
+        document.getElementById(`q${i}_c`).value = '';
+        document.getElementById(`q${i}_d`).value = '';
+        document.getElementById(`q${i}_correct`).value = '0';
+      }
+
+      // সেট নম্বর আপডেট
+      nextSetNumber++;
+      document.getElementById('setInfo').innerHTML = `পরবর্তী সেট নম্বর: <strong>সেট ${nextSetNumber}</strong> (অটো)`;
+      loadExistingSets();
     };
 
-    async function deleteQuestion(id) {
-      if (!confirm('এই প্রশ্ন ডিলিট করতে চান?')) return;
-      await sb.from('questions').delete().eq('id', id);
-      showToast('প্রশ্ন ডিলিট হয়েছে');
-      loadQuestions();
+    async function loadExistingSets() {
+      if (!selectedArticleId) return;
+
+      const { data } = await sb
+        .from('questions')
+        .select('category')
+        .eq('article_id', selectedArticleId);
+
+      const container = document.getElementById('existingSets');
+
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">এখনো কোনো সেট নেই</p>';
+        return;
+      }
+
+      // ইউনিক সেট বের করা
+      const sets = [...new Set(data.map(q => q.category))].sort((a, b) => {
+        return parseInt(a.replace('set_', '')) - parseInt(b.replace('set_', ''));
+      });
+
+      container.innerHTML = sets.map(s => {
+        const num = s.replace('set_', '');
+        const count = data.filter(q => q.category === s).length;
+        return `
+          <div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong>সেট ${num}</strong>
+              <span class="text-muted" style="font-size:0.85rem;"> • ${count}টি প্রশ্ন</span>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     init();
