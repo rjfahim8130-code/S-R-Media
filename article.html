@@ -6,6 +6,7 @@
   <title>প্রবন্ধ - NnowQuiz</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
 </head>
 <body>
   <div class="container page">
@@ -15,67 +16,34 @@
       <div style="width:40px;"></div>
     </div>
 
-    <div id="articleContainer">
-      <div class="loading">
-        <div class="spinner"></div>
-        <p>প্রবন্ধ লোড হচ্ছে...</p>
-      </div>
-    </div>
-
-    <div style="margin-top:24px;">
-      <a href="articles.html" class="btn btn-secondary">← সব প্রবন্ধে ফিরে যান</a>
+    <div id="articleBox">
+      <div class="loading"><div class="spinner"></div></div>
     </div>
   </div>
 
-  <script src="supabase.js"></script>
   <script>
-    async function loadArticle() {
-      const params = new URLSearchParams(window.location.search);
+    async function load() {
+      const params = new URLSearchParams(location.search);
       const id = params.get('id');
-
       if (!id) {
-        document.getElementById('articleContainer').innerHTML = `
-          <div class="empty-state">
-            <p>প্রবন্ধ পাওয়া যায়নি</p>
-            <a href="articles.html" class="btn btn-primary mt-3">ফিরে যান</a>
-          </div>
-        `;
+        document.getElementById('articleBox').innerHTML = '<p class="text-muted text-center">প্রবন্ধ পাওয়া যায়নি</p>';
         return;
       }
 
-      const { data: article, error } = await supabase
-        .from('articles')
-        .select('*')
-        .eq('id', id)
-        .eq('is_active', true)
-        .single();
-
-      const container = document.getElementById('articleContainer');
-
-      if (error || !article) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <div style="font-size:3rem;">❌</div>
-            <p>প্রবন্ধ লোড করা যায়নি</p>
-            <a href="articles.html" class="btn btn-primary mt-3">ফিরে যান</a>
-          </div>
-        `;
+      const { data, error } = await sb.from('articles').select('*').eq('id', id).single();
+      if (error || !data) {
+        document.getElementById('articleBox').innerHTML = '<p class="text-muted text-center">প্রবন্ধ পাওয়া যায়নি</p>';
         return;
       }
 
-      document.title = article.title + ' - NnowQuiz';
-
-      container.innerHTML = `
+      document.getElementById('articleBox').innerHTML = `
         <div class="card">
-          <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:16px;line-height:1.4;">${article.title}</h1>
-          <div style="font-size:1.05rem;line-height:1.8;color:#e2e8f0;">
-            \( {article.content.split('\n').map(p => p.trim() ? `<p style="margin-bottom:16px;"> \){p}</p>` : '').join('')}
-          </div>
+          <div class="card-title">${data.title}</div>
+          <div style="line-height:1.75;white-space:pre-line;font-size:0.98rem;">${data.content || ''}</div>
         </div>
       `;
     }
-
-    loadArticle();
+    load();
   </script>
 </body>
 </html>
