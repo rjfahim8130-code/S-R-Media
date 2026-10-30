@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>এডমিন প্যানেল - NnowQuiz</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+</head>
+<body>
+  <div class="container page">
+    <div class="header">
+      <div class="logo">এডমিন প্যানেল</div>
+      <button class="btn btn-sm btn-danger" onclick="signOut()">লগআউট</button>
+    </div>
+
+    <div class="card" style="background:linear-gradient(135deg,#312e81,#1e1b4b);">
+      <h2 style="font-size:1.3rem;margin-bottom:4px;">স্বাগতম এডমিন!</h2>
+      <p class="text-muted">NnowQuiz ম্যানেজমেন্ট প্যানেল</p>
+    </div>
+
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-value" id="totalUsers">-</div>
+        <div class="stat-label">মোট ইউজার</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalCoins">-</div>
+        <div class="stat-label">মোট কয়েন</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalArticles">-</div>
+        <div class="stat-label">প্রবন্ধ</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalSubmissions">-</div>
+        <div class="stat-label">কুইজ সাবমিশন</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">কুইজ স্ট্যাটাস</div>
+      <p id="quizStatusText" class="mb-3">লোড হচ্ছে...</p>
+      <button class="btn btn-primary" id="toggleQuizBtn">লোড হচ্ছে...</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">ম্যানেজমেন্ট</div>
+      <a href="admin-articles.html" class="btn btn-secondary mb-2">প্রবন্ধ ম্যানেজ করুন</a>
+      <a href="admin-questions.html" class="btn btn-secondary mb-2">প্রশ্ন ম্যানেজ করুন</a>
+      <a href="admin-settings.html" class="btn btn-secondary mb-2">সেটিংস ও পজ কন্ট্রোল</a>
+      <a href="home.html" class="btn btn-outline">ইউজার সাইটে যান</a>
+    </div>
+  </div>
+
+  <script>
+    async function init() {
+      const user = await requireAdmin();
+      if (!user) return;
+
+      // Stats
+      const { count: userCount } = await sb.from('profiles').select('*', { count: 'exact', head: true });
+      const { data: coinsData } = await sb.from('profiles').select('coins');
+      const totalCoins = coinsData ? coinsData.reduce((sum, u) => sum + (u.coins || 0), 0) : 0;
+      const { count: articleCount } = await sb.from('articles').select('*', { count: 'exact', head: true });
+      const { count: submissionCount } = await sb.from('quiz_submissions').select('*', { count: 'exact', head: true });
+
+      document.getElementById('totalUsers').innerText = formatNumber(userCount || 0);
+      document.getElementById('totalCoins').innerText = formatNumber(totalCoins);
+      document.getElementById('totalArticles').innerText = formatNumber(articleCount || 0);
+      document.getElementById('totalSubmissions').innerText = formatNumber(submissionCount || 0);
+
+      // Quiz status
+      const { data: setting } = await sb.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
+      const isPaused = setting?.value === 'true';
+      
+      document.getElementById('quizStatusText').innerText = isPaused ? 'কুইজ বর্তমানে বন্ধ আছে' : 'কুইজ চালু আছে';
+      const btn = document.getElementById('toggleQuizBtn');
+      btn.innerText = isPaused ? 'কুইজ চালু করুন' : 'কুইজ বন্ধ করুন';
+      btn.className = isPaused ? 'btn btn-success' : 'btn btn-danger';
+
+      btn.onclick = async () => {
+        const newValue = isPaused ? 'false' : 'true';
+        await sb.from('app_settings').upsert({ key: 'quiz_paused', value: newValue });
+        showToast(isPaused ? 'কুইজ চালু করা হয়েছে' : 'কুইজ বন্ধ করা হয়েছে');
+        setTimeout(() => location.reload(), 800);
+      };
+    }
+
+    init();
+  </script>
+</body>
+  </html>
