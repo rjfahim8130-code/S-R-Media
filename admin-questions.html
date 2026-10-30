@@ -24,7 +24,7 @@
       background: linear-gradient(135deg, #312e81, #1e1b4b);
       padding: 12px 16px;
       border-radius: 12px;
-      margin-bottom: 16px;
+      margin-top: 12px;
       font-size: 0.95rem;
     }
   </style>
@@ -37,27 +37,20 @@
       <div style="width:40px;"></div>
     </div>
 
-    <!-- প্রবন্ধ সিলেক্ট -->
     <div class="card">
       <div class="card-title">প্রবন্ধ সিলেক্ট করুন</div>
-      <select id="articleSelect" class="form-control" onchange="onArticleChange()">
+      <select id="articleSelect" class="form-control">
         <option value="">প্রবন্ধ বাছাই করুন</option>
       </select>
-      <div id="setInfo" class="set-info" style="display:none;margin-top:12px;"></div>
+      <div id="setInfo" class="set-info" style="display:none;"></div>
     </div>
 
-    <!-- ৫টি প্রশ্ন একসাথে -->
     <div class="card" id="questionsForm" style="display:none;">
       <div class="card-title">নতুন সেট যোগ করুন (৫টি প্রশ্ন)</div>
-
       <div id="questionsContainer"></div>
-
-      <button class="btn btn-primary" id="saveSetBtn" style="margin-top:8px;">
-        এই সেট সেভ করুন
-      </button>
+      <button class="btn btn-primary" id="saveSetBtn">এই সেট সেভ করুন</button>
     </div>
 
-    <!-- বিদ্যমান সেট -->
     <div class="card">
       <div class="card-title">বিদ্যমান সেটসমূহ</div>
       <div id="existingSets">
@@ -76,24 +69,28 @@
     }
 
     async function loadArticles() {
-      const { data } = await sb
+      const { data, error } = await sb
         .from('articles')
         .select('id, title')
         .eq('is_active', true)
         .order('sort_order');
 
       const select = document.getElementById('articleSelect');
-      if (!data || data.length === 0) {
+
+      if (error || !data || data.length === 0) {
         select.innerHTML = '<option value="">কোনো প্রবন্ধ নেই</option>';
         return;
       }
 
-      select.innerHTML = '<option value="">প্রবন্ধ বাছাই করুন</option>' +
-        data.map(a => `<option value="\( {a.id}"> \){a.title}</option>`).join('');
+      let options = '<option value="">প্রবন্ধ বাছাই করুন</option>';
+      data.forEach(function(article) {
+        options += '<option value="' + article.id + '">' + article.title + '</option>';
+      });
+      select.innerHTML = options;
     }
 
-    async function onArticleChange() {
-      selectedArticleId = document.getElementById('articleSelect').value;
+    document.getElementById('articleSelect').addEventListener('change', async function() {
+      selectedArticleId = this.value;
       const form = document.getElementById('questionsForm');
       const setInfo = document.getElementById('setInfo');
 
@@ -112,20 +109,20 @@
 
       let maxSet = 0;
       if (existing && existing.length > 0) {
-        existing.forEach(q => {
-          const num = parseInt(q.category?.replace('set_', '') || 0);
+        existing.forEach(function(q) {
+          const num = parseInt((q.category || '').replace('set_', '')) || 0;
           if (num > maxSet) maxSet = num;
         });
       }
       nextSetNumber = maxSet + 1;
 
       setInfo.style.display = 'block';
-      setInfo.innerHTML = `পরবর্তী সেট নম্বর: <strong>সেট ${nextSetNumber}</strong> (অটো)`;
+      setInfo.innerHTML = 'পরবর্তী সেট নম্বর: <strong>সেট ' + nextSetNumber + '</strong> (অটো)';
 
       form.style.display = 'block';
       renderQuestionForms();
       loadExistingSets();
-    }
+    });
 
     function renderQuestionForms() {
       const container = document.getElementById('questionsContainer');
@@ -170,7 +167,7 @@
       container.innerHTML = html;
     }
 
-    document.getElementById('saveSetBtn').onclick = async () => {
+    document.getElementById('saveSetBtn').addEventListener('click', async function() {
       if (!selectedArticleId) {
         showToast('প্রথমে প্রবন্ধ সিলেক্ট করুন', 'error');
         return;
@@ -179,15 +176,15 @@
       const questions = [];
 
       for (let i = 1; i <= 5; i++) {
-        const text = document.getElementById(`q${i}_text`).value.trim();
-        const a = document.getElementById(`q${i}_a`).value.trim();
-        const b = document.getElementById(`q${i}_b`).value.trim();
-        const c = document.getElementById(`q${i}_c`).value.trim();
-        const d = document.getElementById(`q${i}_d`).value.trim();
-        const correct = parseInt(document.getElementById(`q${i}_correct`).value);
+        const text = document.getElementById('q' + i + '_text').value.trim();
+        const a = document.getElementById('q' + i + '_a').value.trim();
+        const b = document.getElementById('q' + i + '_b').value.trim();
+        const c = document.getElementById('q' + i + '_c').value.trim();
+        const d = document.getElementById('q' + i + '_d').value.trim();
+        const correct = parseInt(document.getElementById('q' + i + '_correct').value);
 
         if (!text || !a || !b || !c || !d) {
-          showToast(`প্রশ্ন ${i} এর সব ঘর পূরণ করুন`, 'error');
+          showToast('প্রশ্ন ' + i + ' এর সব ঘর পূরণ করুন', 'error');
           return;
         }
 
@@ -196,7 +193,7 @@
           question_text: text,
           options: [a, b, c, d],
           correct_answer: correct,
-          category: `set_${nextSetNumber}`
+          category: 'set_' + nextSetNumber
         });
       }
 
@@ -204,26 +201,26 @@
 
       if (error) {
         showToast('সেভ করতে সমস্যা: ' + error.message, 'error');
+        console.error(error);
         return;
       }
 
-      showToast(`সেট ${nextSetNumber} সফলভাবে যোগ হয়েছে!`);
-      
+      showToast('সেট ' + nextSetNumber + ' সফলভাবে যোগ হয়েছে!');
+
       // ফর্ম ক্লিয়ার
       for (let i = 1; i <= 5; i++) {
-        document.getElementById(`q${i}_text`).value = '';
-        document.getElementById(`q${i}_a`).value = '';
-        document.getElementById(`q${i}_b`).value = '';
-        document.getElementById(`q${i}_c`).value = '';
-        document.getElementById(`q${i}_d`).value = '';
-        document.getElementById(`q${i}_correct`).value = '0';
+        document.getElementById('q' + i + '_text').value = '';
+        document.getElementById('q' + i + '_a').value = '';
+        document.getElementById('q' + i + '_b').value = '';
+        document.getElementById('q' + i + '_c').value = '';
+        document.getElementById('q' + i + '_d').value = '';
+        document.getElementById('q' + i + '_correct').value = '0';
       }
 
-      // সেট নম্বর আপডেট
       nextSetNumber++;
-      document.getElementById('setInfo').innerHTML = `পরবর্তী সেট নম্বর: <strong>সেট ${nextSetNumber}</strong> (অটো)`;
+      document.getElementById('setInfo').innerHTML = 'পরবর্তী সেট নম্বর: <strong>সেট ' + nextSetNumber + '</strong> (অটো)';
       loadExistingSets();
-    };
+    });
 
     async function loadExistingSets() {
       if (!selectedArticleId) return;
@@ -240,23 +237,25 @@
         return;
       }
 
-      // ইউনিক সেট বের করা
-      const sets = [...new Set(data.map(q => q.category))].sort((a, b) => {
+      const sets = {};
+      data.forEach(function(q) {
+        const cat = q.category || 'set_1';
+        sets[cat] = (sets[cat] || 0) + 1;
+      });
+
+      const setNames = Object.keys(sets).sort(function(a, b) {
         return parseInt(a.replace('set_', '')) - parseInt(b.replace('set_', ''));
       });
 
-      container.innerHTML = sets.map(s => {
+      let html = '';
+      setNames.forEach(function(s) {
         const num = s.replace('set_', '');
-        const count = data.filter(q => q.category === s).length;
-        return `
-          <div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;">
-            <div>
-              <strong>সেট ${num}</strong>
-              <span class="text-muted" style="font-size:0.85rem;"> • ${count}টি প্রশ্ন</span>
-            </div>
-          </div>
-        `;
-      }).join('');
+        html += '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.08);">' +
+                '<strong>সেট ' + num + '</strong>' +
+                '<span class="text-muted" style="font-size:0.85rem;"> • ' + sets[s] + 'টি প্রশ্ন</span>' +
+                '</div>';
+      });
+      container.innerHTML = html;
     }
 
     init();
