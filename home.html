@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase.js"></script>
+  <script src="ads.js"></script>
 </head>
 <body>
   <div class="container page">
@@ -36,16 +37,17 @@
       </div>
     </div>
 
-    <!-- সেশন প্রোগ্রেস কার্ড -->
+    <!-- সেশন প্রোগ্রেস -->
     <div class="card" id="sessionCard">
       <div class="card-title">আজকের সেশন</div>
       <p id="sessionText" class="mb-2" style="font-size:0.95rem;"></p>
       <div style="background:var(--dark-3);border-radius:10px;height:10px;overflow:hidden;">
         <div id="sessionProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#6366f1,#c084fc);border-radius:10px;transition:width 0.4s;"></div>
       </div>
+      <p id="sessionCountText" class="text-muted mt-2" style="font-size:0.85rem;"></p>
     </div>
 
-    <!-- কুইজ খেলুন কার্ড -->
+    <!-- কুইজ খেলুন -->
     <div class="card">
       <div class="card-title">কুইজ খেলুন</div>
       <p id="quizMotivation" class="mb-3" style="font-size:0.95rem;line-height:1.5;"></p>
@@ -53,22 +55,39 @@
       <p id="quizStatus" class="text-muted text-center mt-2" style="font-size:0.85rem;"></p>
     </div>
 
+    <!-- অ্যাড বক্স -->
+    <div id="homeBannerAd" style="min-height:90px;margin:16px 0;display:flex;justify-content:center;align-items:center;"></div>
+
     <div class="card">
       <div class="card-title">প্রবন্ধ পড়ুন</div>
+      <p class="text-muted mb-2" style="font-size:0.9rem;">ফ্রি প্রবন্ধ পড়ে জ্ঞান বাড়ান</p>
       <a href="articles.html" class="btn btn-secondary">সব প্রবন্ধ দেখুন</a>
     </div>
 
     <div class="card">
-      <div class="card-title">লিডারবোর্ড</div>
-      <a href="leaderboard.html" class="btn btn-outline">লিডারবোর্ড দেখুন</a>
+      <div class="card-title">রেফার ও বোনাস</div>
+      <a href="refer.html" class="btn btn-secondary">রেফার করুন ও বোনাস নিন</a>
     </div>
   </div>
 
+  <!-- বটম ন্যাভ -->
   <div class="bottom-nav">
-    <a href="home.html" class="nav-item active"><span class="icon">🏠</span><span>হোম</span></a>
-    <a href="articles.html" class="nav-item"><span class="icon">📚</span><span>প্রবন্ধ</span></a>
-    <a href="leaderboard.html" class="nav-item"><span class="icon">🏆</span><span>র‍্যাঙ্ক</span></a>
-    <a href="profile.html" class="nav-item"><span class="icon">👤</span><span>প্রোফাইল</span></a>
+    <a href="home.html" class="nav-item active">
+      <span>🏠</span>
+      <span>হোম</span>
+    </a>
+    <a href="articles.html" class="nav-item">
+      <span>📖</span>
+      <span>প্রবন্ধ</span>
+    </a>
+    <a href="leaderboard.html" class="nav-item">
+      <span>🏆</span>
+      <span>লিডারবোর্ড</span>
+    </a>
+    <a href="profile.html" class="nav-item">
+      <span>👤</span>
+      <span>প্রোফাইল</span>
+    </a>
   </div>
 
   <script>
@@ -77,21 +96,31 @@
     async function init() {
       const user = await requireAuth();
       if (!user) return;
-
       profile = await getProfile();
-      if (!profile) {
-        showToast('প্রোফাইল লোড সমস্যা', 'error');
-        return;
-      }
+      if (!profile) return;
 
-      document.getElementById('userName').innerText = profile.full_name || 'ইউজার';
-      document.getElementById('totalPoints').innerText = formatNumber(profile.coins);
-      document.getElementById('userPoints').innerText = formatNumber(profile.coins) + ' পয়েন্ট';
-      document.getElementById('totalQuizzes').innerText = formatNumber(profile.total_quizzes_submitted);
+      document.getElementById('userName').innerText = profile.full_name || profile.name || 'ইউজার';
+      document.getElementById('userPoints').innerText = formatNumber(profile.coins || 0) + ' পয়েন্ট';
+      document.getElementById('totalPoints').innerText = formatNumber(profile.coins || 0);
+      document.getElementById('totalQuizzes').innerText = formatNumber(profile.total_quizzes || 0);
 
-      // কুইজ পজ চেক
-      const { data: settings } = await sb.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
-      if (settings && settings.value === 'true') {
+      // অ্যাড দেখাও
+      AdManager.showBanner('homeBannerAd');
+      AdManager.showMultiTag(); // সেশন শুরুতে একবার
+
+      await loadSessionInfo();
+    }
+
+    async function loadSessionInfo() {
+      const { data: settings } = await sb.from('app_settings').select('*');
+      const map = {};
+      (settings || []).forEach(s => map[s.key] = s.value);
+
+      const sessionLimit = parseInt(map.session_quiz_limit || '8');
+      const dailySessionLimit = parseInt(map.daily_session_limit || '5');
+      const cooldownMin = parseInt(map.cooldown_minutes || '80');
+
+      if (map.quiz_paused === 'true') {
         document.getElementById('startQuizBtn').disabled = true;
         document.getElementById('startQuizBtn').innerText = 'কুইজ বর্তমানে বন্ধ';
         document.getElementById('quizStatus').innerText = 'অ্যাডমিন কুইজ পজ করেছেন';
@@ -99,43 +128,58 @@
         return;
       }
 
-      // বর্তমান সেশনের কুইজ সংখ্যা (শেষ ২ ঘণ্টা)
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      const { data: recent } = await sb
-        .from('quiz_submissions')
-        .select('id')
+      // বর্তমান সেশনের কুইজ (কুলডাউন অনুযায়ী)
+      const cooldownAgo = new Date(Date.now() - cooldownMin * 60 * 1000).toISOString();
+      const { data: recent } = await sb.from('quiz_submissions')
+        .select('id, submitted_at')
         .eq('user_id', profile.id)
-        .gte('submitted_at', twoHoursAgo);
+        .gte('submitted_at', cooldownAgo)
+        .order('submitted_at', { ascending: false });
 
       const completedInSession = recent ? recent.length : 0;
-      const remaining = Math.max(0, 8 - completedInSession);
+      const remaining = Math.max(0, sessionLimit - completedInSession);
 
-      // সেশন প্রোগ্রেস
-      const sessionPercent = (completedInSession / 8) * 100;
-      document.getElementById('sessionProgressBar').style.width = sessionPercent + '%';
+      // আজকের মোট সেশন হিসাব (সরল)
+      const todayStart = new Date();
+      todayStart.setHours(0,0,0,0);
+      const { data: todaySubs } = await sb.from('quiz_submissions')
+        .select('submitted_at')
+        .eq('user_id', profile.id)
+        .gte('submitted_at', todayStart.toISOString());
+
+      // আনুমানিক সেশন সংখ্যা
+      const todayCount = todaySubs ? todaySubs.length : 0;
+      const approxSessions = Math.ceil(todayCount / sessionLimit);
+
+      // প্রোগ্রেস বার
+      const percent = (completedInSession / sessionLimit) * 100;
+      document.getElementById('sessionProgressBar').style.width = percent + '%';
 
       if (completedInSession === 0) {
-        document.getElementById('sessionText').innerHTML = '🔥 আজকের সেশন শুরু করুন! ৮টি কুইজ সম্পন্ন করে পুরস্কারের দিকে এগিয়ে যান';
-      } else if (completedInSession < 8) {
-        document.getElementById('sessionText').innerHTML = `🎯 আপনি <strong>${completedInSession}/৮</strong> টি কুইজ সম্পন্ন করেছেন। বাকি ${remaining}টি শেষ করুন!`;
+        document.getElementById('sessionText').innerHTML = `🔥 নতুন সেশন শুরু করুন! ${sessionLimit}টি কুইজ সম্পন্ন করে পুরস্কারের দিকে এগিয়ে যান`;
+      } else if (completedInSession < sessionLimit) {
+        document.getElementById('sessionText').innerHTML = `🎯 আপনি <strong>\( {completedInSession}/ \){sessionLimit}</strong> টি কুইজ সম্পন্ন করেছেন। বাকি ${remaining}টি শেষ করুন!`;
       } else {
-        document.getElementById('sessionText').innerHTML = '🏆 দারুণ! এই সেশনের ৮টি কুইজ সম্পন্ন হয়েছে। পরের সেশনের জন্য অপেক্ষা করুন।';
+        document.getElementById('sessionText').innerHTML = `🏆 দারুণ! এই সেশনের ${sessionLimit}টি কুইজ সম্পন্ন হয়েছে।`;
         document.getElementById('startQuizBtn').disabled = true;
         document.getElementById('startQuizBtn').innerText = 'সেশন লিমিট শেষ';
+        document.getElementById('quizStatus').innerText = `${cooldownMin} মিনিট পর আবার খেলতে পারবেন`;
       }
+
+      document.getElementById('sessionCountText').innerText = `আজকের আনুমানিক সেশন: \( {Math.min(approxSessions, dailySessionLimit)}/ \){dailySessionLimit}`;
 
       // উৎসাহমূলক বাক্য
       let motivation = '';
       if (completedInSession === 0) {
         motivation = '🚀 প্রথম কুইজ দিয়ে শুরু করুন! প্রতিটি সঠিক উত্তরে ১০ কয়েন পান।';
       } else if (completedInSession <= 2) {
-        motivation = `💪 আপনি ${completedInSession}/৮ টি সম্পন্ন করেছেন। গতি ধরে রাখুন, পুরস্কার কাছে!`;
+        motivation = `💪 আপনি \( {completedInSession}/ \){sessionLimit} টি সম্পন্ন করেছেন। গতি ধরে রাখুন!`;
       } else if (completedInSession <= 5) {
-        motivation = `🔥 চমৎকার অগ্রগতি! ${completedInSession}/৮ সম্পন্ন। আর একটু চেষ্টা করুন!`;
-      } else if (completedInSession < 8) {
+        motivation = `🔥 চমৎকার অগ্রগতি! \( {completedInSession}/ \){sessionLimit} সম্পন্ন। আর একটু চেষ্টা করুন!`;
+      } else if (completedInSession < sessionLimit) {
         motivation = `⭐ প্রায় শেষ! শুধু ${remaining}টি কুইজ বাকি। পুরস্কার নিশ্চিত করতে এগিয়ে যান!`;
       } else {
-        motivation = '🎉 এই সেশনের সব কুইজ সম্পন্ন! দুই ঘণ্টা পর আবার খেলতে পারবেন।';
+        motivation = `🎉 এই সেশনের সব কুইজ সম্পন্ন! ${cooldownMin} মিনিট পর আবার খেলতে পারবেন।`;
       }
       document.getElementById('quizMotivation').innerHTML = motivation;
     }
@@ -143,6 +187,10 @@
     document.getElementById('startQuizBtn').addEventListener('click', () => {
       window.location.href = 'quiz.html';
     });
+
+    function formatNumber(num) {
+      return new Intl.NumberFormat('bn-BD').format(num || 0);
+    }
 
     init();
   </script>
