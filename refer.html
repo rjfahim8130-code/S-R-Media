@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>রেফার - NnowQuiz</title>
+  
+  <meta name="monetag" content="5d5bd8350ba1e36f1af8d3b4b95c4595">
+  <meta name="8645434d5e68c17799df1ccb083d05cc97221a9c" content="8645434d5e68c17799df1ccb083d05cc97221a9c" />
+  <meta name="clckd" content="85de58977d8432e90f4c1b625a374f3d" />
+
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script src="ads.js"></script>
+</head>
+<body>
+  <div class="container page">
+    <div class="header">
+      <button class="back-btn" onclick="location.href='home.html'">←</button>
+      <div class="logo">রেফার ও বোনাস</div>
+      <div style="width:40px;"></div>
+    </div>
+
+    <div class="card" style="background:linear-gradient(135deg,#312e81,#1e1b4b);">
+      <h2 style="font-size:1.2rem;margin-bottom:8px;">বন্ধুদের রেফার করুন 🎁</h2>
+      <p class="text-muted" style="font-size:0.95rem;">প্রতি রেফারে ১০% বোনাস পাবেন (ক্লেইম করতে হবে)</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">আপনার রেফার লিংক</div>
+      <div style="background:var(--dark-3);padding:12px;border-radius:10px;word-break:break-all;font-size:0.9rem;" id="referLink">লোড হচ্ছে...</div>
+      <button class="btn btn-primary mt-2" id="copyBtn">কপি করুন</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">রেফার স্ট্যাটস</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="totalRefer">০</div>
+          <div class="stat-label">মোট রেফার</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="activeRefer">০</div>
+          <div class="stat-label">সচল রেফার</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- অ্যাড -->
+    <div id="referBannerAd" style="min-height:90px;margin:16px 0;display:flex;justify-content:center;"></div>
+
+    <div class="card">
+      <div class="card-title">বোনাস ক্লেইম</div>
+      <p class="text-muted mb-2" style="font-size:0.9rem;">প্রতি রেফারের বোনাস আলাদা করে ক্লেইম করতে হবে। ১২ ঘণ্টা পর এক্সপায়ার হবে।</p>
+      <div id="claimList">
+        <p class="text-muted text-center">লোড হচ্ছে...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <a href="home.html" class="nav-item">
+      <span>🏠</span>
+      <span>হোম</span>
+    </a>
+    <a href="articles.html" class="nav-item">
+      <span>📖</span>
+      <span>প্রবন্ধ</span>
+    </a>
+    <a href="leaderboard.html" class="nav-item">
+      <span>🏆</span>
+      <span>লিডারবোর্ড</span>
+    </a>
+    <a href="profile.html" class="nav-item">
+      <span>👤</span>
+      <span>প্রোফাইল</span>
+    </a>
+  </div>
+
+  <script>
+    let profile = null;
+    let claimCount = 0;
+
+    async function init() {
+      const user = await requireAuth();
+      if (!user) return;
+      profile = await getProfile();
+      if (!profile) return;
+
+      // রেফার লিংক
+      const link = location.origin + '/register.html?ref=' + (profile.referral_code || profile.id.substring(0,8));
+      document.getElementById('referLink').innerText = link;
+
+      document.getElementById('copyBtn').onclick = () => {
+        navigator.clipboard.writeText(link).then(() => {
+          showToast('লিংক কপি হয়েছে!');
+        });
+      };
+
+      AdManager.showBanner('referBannerAd');
+      await loadReferStats();
+      await loadClaims();
+    }
+
+    async function loadReferStats() {
+      // মোট রেফার
+      const { count: total } = await sb.from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('referred_by', profile.id);
+
+      document.getElementById('totalRefer').innerText = total || 0;
+
+      // সচল রেফার (কমপক্ষে ২০টি কুইজ জমা দিয়েছে)
+      const { data: refs } = await sb.from('profiles')
+        .select('id, total_quizzes')
+        .eq('referred_by', profile.id);
+
+      const active = (refs || []).filter(r => (r.total_quizzes || 0) >= 20).length;
+      document.getElementById('activeRefer').innerText = active;
+    }
+
+    async function loadClaims() {
+      // এখানে রেফার বোনাস ক্লেইম লজিক থাকবে
+      // আপাতত সিম্পল ভার্সন
+      const list = document.getElementById('claimList');
+
+      const { data: refs } = await sb.from('profiles')
+        .select('id, full_name, name, coins, total_quizzes, created_at')
+        .eq('referred_by', profile.id)
+        .order('created_at', { ascending: false });
+
+      if (!refs || refs.length === 0) {
+        list.innerHTML = `<p class="text-muted text-center">এখনো কোনো রেফার নেই</p>`;
+        return;
+      }
+
+      list.innerHTML = refs.map((r, i) => {
+        const name = r.full_name || r.name || 'ইউজার';
+        const bonus = Math.floor((r.coins || 0) * 0.10);
+        const canClaim = (r.total_quizzes || 0) >= 20 && bonus > 0;
+
+        return `
+          <div class="card" style="margin-bottom:10px;padding:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div style="font-weight:600;">${name}</div>
+                <div class="text-muted" style="font-size:0.85rem;">বোনাস: ${bonus} পয়েন্ট</div>
+              </div>
+              <button class="btn btn-primary" style="padding:8px 14px;font-size:0.85rem;" 
+                onclick="claimBonus('${r.id}', ${bonus}, this)" ${canClaim ? '' : 'disabled'}>
+                ${canClaim ? 'ক্লেইম' : 'অযোগ্য'}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function claimBonus(refId, bonus, btn) {
+      if (bonus <= 0) return;
+
+      btn.disabled = true;
+      btn.innerText = 'অপেক্ষা করুন...';
+
+      // প্রতি ৫ ক্লেইমে ১টা Interstitial
+      claimCount++;
+      if (claimCount % 5 === 1) {
+        await AdManager.showInterstitial();
+      }
+
+      // বোনাস যোগ
+      const { data: myProfile } = await sb.from('profiles').select('coins').eq('id', profile.id).single();
+      await sb.from('profiles').update({
+        coins: (myProfile.coins || 0) + bonus
+      }).eq('id', profile.id);
+
+      showToast(`+${bonus} পয়েন্ট ক্লেইম হয়েছে!`);
+      btn.innerText = 'ক্লেইমড';
+      btn.disabled = true;
+    }
+
+    // গ্লোবাল করে রাখা
+    window.claimBonus = claimBonus;
+
+    init();
+  </script>
+</body>
+</html>
