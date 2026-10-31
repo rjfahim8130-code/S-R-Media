@@ -158,7 +158,7 @@
       if (completedInSession === 0) {
         document.getElementById('sessionText').innerHTML = `🔥 নতুন সেশন শুরু করুন! ${sessionLimit}টি কুইজ সম্পন্ন করে পুরস্কারের দিকে এগিয়ে যান`;
       } else if (completedInSession < sessionLimit) {
-        document.getElementById('sessionText').innerHTML = `🎯 আপনি <strong>\( {completedInSession}/ \){sessionLimit}</strong> টি কুইজ সম্পন্ন করেছেন। বাকি ${remaining}টি শেষ করুন!`;
+        document.getElementById('sessionText').innerHTML = `🎯 আপনি <strong>${completedInSession}/${sessionLimit}</strong> টি কুইজ সম্পন্ন করেছেন। বাকি ${remaining}টি শেষ করুন!`;
       } else {
         document.getElementById('sessionText').innerHTML = `🏆 দারুণ! এই সেশনের ${sessionLimit}টি কুইজ সম্পন্ন হয়েছে।`;
         document.getElementById('startQuizBtn').disabled = true;
@@ -166,16 +166,16 @@
         document.getElementById('quizStatus').innerText = `${cooldownMin} মিনিট পর আবার খেলতে পারবেন`;
       }
 
-      document.getElementById('sessionCountText').innerText = `আজকের আনুমানিক সেশন: \( {Math.min(approxSessions, dailySessionLimit)}/ \){dailySessionLimit}`;
+      document.getElementById('sessionCountText').innerText = `আজকের আনুমানিক সেশন: ${Math.min(approxSessions, dailySessionLimit)}/${dailySessionLimit}`;
 
       // উৎসাহমূলক বাক্য
       let motivation = '';
       if (completedInSession === 0) {
         motivation = '🚀 প্রথম কুইজ দিয়ে শুরু করুন! প্রতিটি সঠিক উত্তরে ১০ কয়েন পান।';
       } else if (completedInSession <= 2) {
-        motivation = `💪 আপনি \( {completedInSession}/ \){sessionLimit} টি সম্পন্ন করেছেন। গতি ধরে রাখুন!`;
+        motivation = `💪 আপনি ${completedInSession}/${sessionLimit} টি সম্পন্ন করেছেন। গতি ধরে রাখুন!`;
       } else if (completedInSession <= 5) {
-        motivation = `🔥 চমৎকার অগ্রগতি! \( {completedInSession}/ \){sessionLimit} সম্পন্ন। আর একটু চেষ্টা করুন!`;
+        motivation = `🔥 চমৎকার অগ্রগতি! ${completedInSession}/${sessionLimit} সম্পন্ন। আর একটু চেষ্টা করুন!`;
       } else if (completedInSession < sessionLimit) {
         motivation = `⭐ প্রায় শেষ! শুধু ${remaining}টি কুইজ বাকি। পুরস্কার নিশ্চিত করতে এগিয়ে যান!`;
       } else {
