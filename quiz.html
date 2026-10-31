@@ -4,10 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>কুইজ - NnowQuiz</title>
+  
+  <meta name="monetag" content="5d5bd8350ba1e36f1af8d3b4b95c4595">
+  <meta name="8645434d5e68c17799df1ccb083d05cc97221a9c" content="8645434d5e68c17799df1ccb083d05cc97221a9c" />
+  <meta name="clckd" content="85de58977d8432e90f4c1b625a374f3d" />
+
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase.js"></script>
+  <script src="ads.js"></script>
+
   <style>
+    .timer-box {
+      background: linear-gradient(135deg, #312e81, #1e1b4b);
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .timer-number {
+      font-size: 2.8rem;
+      font-weight: 800;
+      color: #a5b4fc;
+    }
+    .motivate-text {
+      font-size: 1rem;
+      margin-top: 8px;
+      color: #c7d2fe;
+    }
     .question-card {
       background: var(--dark-2);
       border: 1px solid rgba(255,255,255,0.08);
@@ -43,6 +67,20 @@
       font-size: 0.9rem;
       flex-shrink: 0;
     }
+    .verify-item {
+      background: var(--dark-2);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .ad-box {
+      min-height: 90px;
+      margin: 16px 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
   </style>
 </head>
 <body>
@@ -53,23 +91,48 @@
       <div id="quizProgress" class="badge badge-primary">০/৫</div>
     </div>
 
-    <!-- প্রবন্ধ সেকশন -->
+    <!-- ===== প্রবন্ধ সেকশন ===== -->
     <div id="articleSection">
+      <div class="timer-box" id="articleTimerBox">
+        <div class="timer-number" id="articleTimer">৭৫</div>
+        <div class="motivate-text" id="articleMotivate">বইয়ের মতো করে পড়ুন 📖 মনোযোগ দিলেই পয়েন্ট বেশি পাবেন!</div>
+      </div>
+
       <div class="card">
         <div class="card-title" id="articleTitle">প্রবন্ধ লোড হচ্ছে...</div>
         <div id="articleContent" style="line-height:1.75;font-size:0.98rem;white-space:pre-line;"></div>
       </div>
-      <button class="btn btn-primary" id="startQuestionsBtn" style="display:none;">প্রশ্নোত্তরে যান</button>
+
+      <div class="ad-box" id="articleNativeAd"></div>
+
+      <button class="btn btn-primary" id="startQuestionsBtn" disabled>প্রশ্নোত্তরে যান (অপেক্ষা করুন)</button>
     </div>
 
-    <!-- প্রশ্ন সেকশন (সব এক পেজে) -->
+    <!-- ===== প্রশ্ন সেকশন ===== -->
     <div id="questionsSection" style="display:none;">
+      <div class="timer-box" id="questionTimerBox">
+        <div class="timer-number" id="questionTimer">৫০</div>
+        <div class="motivate-text">মনোযোগ দিয়ে উত্তর দিন 💪 প্রতিটি সঠিক উত্তরে ১০ পয়েন্ট!</div>
+      </div>
+
       <div id="allQuestions"></div>
+
+      <div class="ad-box" id="questionNativeAd"></div>
+
       <button class="btn btn-primary" id="submitBtn" disabled>কুইজ জমা দিন</button>
       <button class="btn btn-secondary mt-2" id="showArticleBtn">প্রবন্ধ আবার পড়ুন</button>
     </div>
 
-    <!-- রেজাল্ট সেকশন -->
+    <!-- ===== রেজাল্ট ভেরিফিকেশন ===== -->
+    <div id="verifySection" style="display:none;">
+      <div class="card">
+        <h2 style="text-align:center;margin-bottom:16px;">উত্তর যাচাই করা হচ্ছে...</h2>
+        <div id="verifyList"></div>
+      </div>
+      <div class="ad-box" id="resultBannerAd"></div>
+    </div>
+
+    <!-- ===== ফাইনাল রেজাল্ট ===== -->
     <div id="resultSection" style="display:none;text-align:center;">
       <div class="card" style="padding:30px 20px;">
         <div style="font-size:3.5rem;margin-bottom:12px;" id="resultEmoji">🎉</div>
@@ -86,7 +149,13 @@
     let currentArticle = null;
     let questions = [];
     let answers = {};
-    let currentSet = null;
+    let articleTimerInterval = null;
+    let questionTimerInterval = null;
+    let canStartQuestions = false;
+    let canSubmit = false;
+
+    const ARTICLE_TIME = 75;   // সেকেন্ড
+    const QUESTION_TIME = 50;  // সেকেন্ড
 
     async function init() {
       const user = await requireAuth();
@@ -94,157 +163,260 @@
       profile = await getProfile();
       if (!profile) return;
 
-      const { data: pause } = await sb.from('app_settings').select('value').eq('key', 'quiz_paused').maybeSingle();
-      if (pause?.value === 'true') {
+      // সেশন লিমিট চেক
+      const { data: settings } = await sb.from('app_settings').select('*');
+      const settingsMap = {};
+      (settings || []).forEach(s => settingsMap[s.key] = s.value);
+
+      if (settingsMap.quiz_paused === 'true') {
         showToast('কুইজ বর্তমানে বন্ধ আছে', 'error');
         setTimeout(() => location.href = 'home.html', 1500);
         return;
       }
 
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      const { data: recent } = await sb.from('quiz_submissions').select('id').eq('user_id', profile.id).gte('submitted_at', twoHoursAgo);
-      if (recent && recent.length >= 8) {
-        showToast('২ ঘণ্টায় সর্বোচ্চ ৮টি কুইজ দেওয়া যাবে', 'warning');
+      const sessionLimit = parseInt(settingsMap.session_quiz_limit || '8');
+      const cooldownMin = parseInt(settingsMap.cooldown_minutes || '80');
+
+      const cooldownAgo = new Date(Date.now() - cooldownMin * 60 * 1000).toISOString();
+      const { data: recent } = await sb.from('quiz_submissions')
+        .select('id')
+        .eq('user_id', profile.id)
+        .gte('submitted_at', cooldownAgo);
+
+      if (recent && recent.length >= sessionLimit) {
+        showToast(`এই সেশনের ${sessionLimit}টি কুইজ শেষ। ${cooldownMin} মিনিট পর আবার চেষ্টা করুন।`, 'error');
         setTimeout(() => location.href = 'home.html', 2000);
         return;
       }
 
-      await loadQuiz();
+      await loadArticleAndQuestions();
+      startArticleTimer();
+      AdManager.showNative('articleNativeAd');
     }
 
-    async function loadQuiz() {
-      const { data: articlesWithQuestions } = await sb
-        .from('questions')
-        .select('article_id, articles(id, title, content, sort_order)')
-        .not('article_id', 'is', null);
+    async function loadArticleAndQuestions() {
+      const { data: qData } = await sb.from('questions').select('article_id').not('article_id', 'is', null);
+      const articleIds = [...new Set((qData || []).map(q => q.article_id))];
 
-      if (!articlesWithQuestions || articlesWithQuestions.length === 0) {
-        document.getElementById('articleTitle').innerText = 'কোনো প্রবন্ধে প্রশ্ন নেই';
+      if (articleIds.length === 0) {
+        document.getElementById('articleTitle').innerText = 'কোনো প্রবন্ধ পাওয়া যায়নি';
         return;
       }
 
-      const uniqueArticles = [];
-      const seen = new Set();
-      articlesWithQuestions.forEach(item => {
-        if (item.articles && !seen.has(item.articles.id)) {
-          seen.add(item.articles.id);
-          uniqueArticles.push(item.articles);
-        }
-      });
-      uniqueArticles.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      const { count } = await sb.from('quiz_submissions').select('*', { count: 'exact', head: true }).eq('user_id', profile.id);
+      const idx = (count || 0) % articleIds.length;
+      const selectedId = articleIds[idx];
 
-      const quizCount = profile.total_quizzes_submitted || 0;
-      currentArticle = uniqueArticles[quizCount % uniqueArticles.length];
+      const { data: article } = await sb.from('articles').select('*').eq('id', selectedId).single();
+      if (!article) {
+        document.getElementById('articleTitle').innerText = 'প্রবন্ধ লোড ব্যর্থ';
+        return;
+      }
 
-      document.getElementById('articleTitle').innerText = currentArticle.title;
-      document.getElementById('articleContent').innerText = currentArticle.content || '';
-      document.getElementById('startQuestionsBtn').style.display = 'block';
+      currentArticle = article;
+      document.getElementById('articleTitle').innerText = article.title;
+      document.getElementById('articleContent').innerText = article.content;
 
-      const { data: allQuestions } = await sb
-        .from('questions')
+      const { data: qs } = await sb.from('questions')
         .select('*')
-        .eq('article_id', currentArticle.id)
-        .order('id');
+        .eq('article_id', selectedId)
+        .order('id', { ascending: true })
+        .limit(5);
 
-      if (!allQuestions || allQuestions.length === 0) {
-        document.getElementById('startQuestionsBtn').innerText = 'এই প্রবন্ধে এখনো প্রশ্ন নেই';
-        document.getElementById('startQuestionsBtn').disabled = true;
-        return;
+      questions = qs || [];
+      if (questions.length === 0) {
+        document.getElementById('articleTitle').innerText = 'এই প্রবন্ধে কোনো প্রশ্ন নেই';
       }
-
-      const sets = {};
-      allQuestions.forEach(q => {
-        const setName = q.category || 'set_1';
-        if (!sets[setName]) sets[setName] = [];
-        sets[setName].push(q);
-      });
-
-      const setNames = Object.keys(sets).sort((a, b) => parseInt(a.replace('set_', '')) - parseInt(b.replace('set_', '')));
-      currentSet = setNames[quizCount % setNames.length];
-      questions = sets[currentSet].slice(0, 5);
-
-      document.getElementById('quizProgress').innerText = '০/' + questions.length;
     }
 
-    document.getElementById('startQuestionsBtn').onclick = () => {
+    function startArticleTimer() {
+      let timeLeft = ARTICLE_TIME;
+      document.getElementById('articleTimer').innerText = timeLeft;
+      document.getElementById('startQuestionsBtn').disabled = true;
+      document.getElementById('startQuestionsBtn').innerText = `প্রশ্নোত্তরে যান (${timeLeft}s)`;
+
+      const motivates = [
+        'বইয়ের মতো করে পড়ুন 📖 মনোযোগ দিলেই পয়েন্ট বেশি পাবেন!',
+        'প্রতিটি লাইন মনোযোগ দিয়ে পড়ুন ✨',
+        'জ্ঞানই শক্তি! ভালো করে পড়ুন 💪',
+        'আর একটু সময় দিন, প্রশ্ন সহজ মনে হবে 🌟'
+      ];
+
+      articleTimerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('articleTimer').innerText = timeLeft;
+        document.getElementById('startQuestionsBtn').innerText = `প্রশ্নোত্তরে যান (${timeLeft}s)`;
+
+        if (timeLeft % 15 === 0) {
+          document.getElementById('articleMotivate').innerText = motivates[Math.floor(Math.random() * motivates.length)];
+        }
+
+        if (timeLeft <= 0) {
+          clearInterval(articleTimerInterval);
+          canStartQuestions = true;
+          document.getElementById('startQuestionsBtn').disabled = false;
+          document.getElementById('startQuestionsBtn').innerText = 'প্রশ্নোত্তরে যান';
+          document.getElementById('articleTimerBox').style.display = 'none';
+        }
+      }, 1000);
+    }
+
+    document.getElementById('startQuestionsBtn').addEventListener('click', () => {
+      if (!canStartQuestions) return;
       document.getElementById('articleSection').style.display = 'none';
       document.getElementById('questionsSection').style.display = 'block';
-      renderAllQuestions();
-    };
+      renderQuestions();
+      startQuestionTimer();
+      AdManager.showNative('questionNativeAd');
+    });
 
-    document.getElementById('showArticleBtn').onclick = () => {
-      document.getElementById('questionsSection').style.display = 'none';
-      document.getElementById('articleSection').style.display = 'block';
-    };
+    function startQuestionTimer() {
+      let timeLeft = QUESTION_TIME;
+      document.getElementById('questionTimer').innerText = timeLeft;
+      canSubmit = false;
+      document.getElementById('submitBtn').disabled = true;
 
-    function renderAllQuestions() {
+      questionTimerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('questionTimer').innerText = timeLeft;
+
+        if (timeLeft <= 0) {
+          clearInterval(questionTimerInterval);
+          canSubmit = true;
+          document.getElementById('questionTimerBox').style.display = 'none';
+          updateSubmitButton();
+        }
+      }, 1000);
+    }
+
+    function renderQuestions() {
       const container = document.getElementById('allQuestions');
-      const labels = ['A', 'B', 'C', 'D'];
-      let html = '';
+      container.innerHTML = '';
+      const labels = ['ক', 'খ', 'গ', 'ঘ'];
 
       questions.forEach((q, qIndex) => {
-        html += '<div class="question-card">';
-        html += '<div style="font-size:0.85rem;color:var(--primary-light);font-weight:600;margin-bottom:6px;">প্রশ্ন ' + (qIndex + 1) + ' / ' + questions.length + '</div>';
-        html += '<div style="font-size:1.05rem;font-weight:600;margin-bottom:14px;line-height:1.5;">' + q.question_text + '</div>';
+        const opts = Array.isArray(q.options) ? q.options : JSON.parse(q.options || '[]');
+        let html = `<div class="question-card">
+          <div style="font-weight:700;margin-bottom:12px;">${qIndex + 1}. ${q.question_text}</div>`;
 
-        (q.options || []).forEach((opt, idx) => {
-          const selected = answers[qIndex] === idx ? 'selected' : '';
-          html += '<div class="option-btn ' + selected + '" onclick="selectOption(' + qIndex + ',' + idx + ')">';
-          html += '<div class="option-label">' + labels[idx] + '</div>';
-          html += '<div>' + opt + '</div>';
-          html += '</div>';
+        opts.forEach((opt, oIndex) => {
+          html += `<div class="option-btn" data-q="${qIndex}" data-o="${oIndex}">
+            <div class="option-label">${labels[oIndex]}</div>
+            <div>${opt}</div>
+          </div>`;
         });
-
-        html += '</div>';
+        html += `</div>`;
+        container.innerHTML += html;
       });
 
-      container.innerHTML = html;
-      updateProgress();
-    }
-
-    window.selectOption = (qIndex, optIndex) => {
-      answers[qIndex] = optIndex;
-      renderAllQuestions();
-    };
-
-    function updateProgress() {
-      const answered = Object.keys(answers).length;
-      document.getElementById('quizProgress').innerText = answered + '/' + questions.length;
-      document.getElementById('submitBtn').disabled = answered < questions.length;
-    }
-
-    document.getElementById('submitBtn').onclick = async () => {
-      let correct = 0;
-      questions.forEach((q, i) => {
-        if (answers[i] === q.correct_answer) correct++;
+      document.querySelectorAll('.option-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const qIdx = btn.dataset.q;
+          document.querySelectorAll(`.option-btn[data-q="${qIdx}"]`).forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          answers[qIdx] = parseInt(btn.dataset.o);
+          document.getElementById('quizProgress').innerText = Object.keys(answers).length + '/' + questions.length;
+          updateSubmitButton();
+        });
       });
+    }
 
-      const coins = correct * 10;
+    function updateSubmitButton() {
+      const allAnswered = Object.keys(answers).length >= questions.length;
+      document.getElementById('submitBtn').disabled = !(allAnswered && canSubmit);
+    }
 
+    document.getElementById('showArticleBtn').addEventListener('click', () => {
+      document.getElementById('questionsSection').style.display = 'none';
+      document.getElementById('articleSection').style.display = 'block';
+      document.getElementById('articleTimerBox').style.display = 'block';
+      canStartQuestions = false;
+      startArticleTimer();
+      AdManager.showNative('articleNativeAd');
+
+      if (Math.random() < 0.35) {
+        AdManager.showInterstitial();
+      }
+    });
+
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+      if (!canSubmit || Object.keys(answers).length < questions.length) return;
+
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('submitBtn').innerText = 'বিজ্ঞাপন দেখুন...';
+
+      await AdManager.showInterstitial();
+
+      document.getElementById('questionsSection').style.display = 'none';
+      document.getElementById('verifySection').style.display = 'block';
+      AdManager.showBanner('resultBannerAd');
+
+      await runVerification();
+    });
+
+    async function runVerification() {
+      const list = document.getElementById('verifyList');
+      list.innerHTML = '';
+      let correctCount = 0;
+
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const userAns = answers[i];
+        const isCorrect = userAns === q.correct_answer;
+        if (isCorrect) correctCount++;
+
+        const div = document.createElement('div');
+        div.className = 'verify-item';
+        div.innerHTML = `<div style="font-size:1.1rem;margin-bottom:8px;">${i + 1} নং উত্তর যাচাই করা হচ্ছে...</div>
+                         <div style="font-size:1.6rem;" id="count${i}">৩</div>`;
+        list.appendChild(div);
+
+        for (let c = 3; c >= 1; c--) {
+          document.getElementById('count' + i).innerText = c;
+          await sleep(700);
+        }
+
+        if (isCorrect) {
+          div.innerHTML = `<div style="font-size:1.5rem;">🎉 হুররে!</div>
+                           <div style="margin-top:6px;">আপনার ${i + 1} নং উত্তর <strong style="color:#4ade80;">সঠিক</strong> হয়েছে</div>
+                           <div style="margin-top:4px;color:#a5b4fc;">+১০ পয়েন্ট 😍</div>`;
+        } else {
+          div.innerHTML = `<div style="font-size:1.5rem;">😅</div>
+                           <div style="margin-top:6px;">আপনার ${i + 1} নং উত্তর <strong style="color:#f87171;">ভুল</strong> হয়েছে</div>`;
+        }
+        await sleep(900);
+      }
+
+      const coins = correctCount * 10;
       await sb.from('quiz_submissions').insert({
         user_id: profile.id,
         article_id: currentArticle.id,
-        set_number: parseInt((currentSet || 'set_1').replace('set_', '')) || 1,
-        score: correct,
+        correct_count: correctCount,
+        total_questions: questions.length,
         coins_earned: coins
       });
 
       await sb.from('profiles').update({
         coins: (profile.coins || 0) + coins,
-        total_quizzes_submitted: (profile.total_quizzes_submitted || 0) + 1,
-        last_quiz_at: new Date().toISOString()
+        total_quizzes: (profile.total_quizzes || 0) + 1
       }).eq('id', profile.id);
 
-      document.getElementById('questionsSection').style.display = 'none';
+      await sleep(800);
+      document.getElementById('verifySection').style.display = 'none';
       document.getElementById('resultSection').style.display = 'block';
 
-      document.getElementById('resultEmoji').innerText = correct >= 4 ? '🎉' : correct >= 2 ? '👍' : '💪';
-      document.getElementById('resultTitle').innerText = correct >= 4 ? 'দারুণ!' : correct >= 2 ? 'ভালো করেছেন!' : 'আবার চেষ্টা করুন!';
-      document.getElementById('resultText').innerText = 'আপনি ' + questions.length + 'টির মধ্যে ' + correct + 'টি সঠিক করেছেন';
-      document.getElementById('coinsEarned').innerText = '+' + coins + ' কয়েন';
-    };
+      document.getElementById('resultEmoji').innerText = correctCount >= 4 ? '🏆' : correctCount >= 2 ? '🎉' : '💪';
+      document.getElementById('resultTitle').innerText = correctCount >= 4 ? 'অসাধারণ!' : correctCount >= 2 ? 'দারুণ!' : 'আরও চেষ্টা করুন!';
+      document.getElementById('resultText').innerText = `${correctCount}টি সঠিক উত্তর দিয়েছেন`;
+      document.getElementById('coinsEarned').innerText = `+${coins} পয়েন্ট`;
+    }
+
+    function sleep(ms) {
+      return new Promise(r => setTimeout(r, ms));
+    }
 
     init();
   </script>
 </body>
-</html>
+  </html>
+  
