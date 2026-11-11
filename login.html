@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>লগইন - QuickQuiz</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="container" style="padding-top:40px">
+    <div class="hero">
+      <h1 style="font-size:1.8rem">লগইন</h1>
+      <p>আপনার অ্যাকাউন্টে প্রবেশ করুন</p>
+    </div>
+
+    <div class="card">
+      <div id="error" class="error" style="display:none"></div>
+      <form id="loginForm">
+        <label>ইমেইল</label>
+        <input type="email" id="email" class="input" required placeholder="you@email.com">
+        <label>পাসওয়ার্ড</label>
+        <input type="password" id="password" class="input" required placeholder="••••••••">
+        <button type="submit" class="btn btn-primary" id="btn">লগইন করুন</button>
+      </form>
+    </div>
+    <p class="center text-sm">অ্যাকাউন্ট নেই? <a href="register.html" style="color:#34d399">রেজিস্টার করুন</a></p>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="supabase.js"></script>
+  <script>
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault()
+      const btn = document.getElementById('btn')
+      const err = document.getElementById('error')
+      btn.disabled = true
+      btn.textContent = 'প্রবেশ করা হচ্ছে...'
+      err.style.display = 'none'
+
+      const { error } = await sb.auth.signInWithPassword({
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value
+      })
+
+      if (error) {
+        err.textContent = error.message.includes('Invalid') ? 'ইমেইল বা পাসওয়ার্ড ভুল' : error.message
+        err.style.display = 'block'
+        btn.disabled = false
+        btn.textContent = 'লগইন করুন'
+      } else {
+        location.href = 'dashboard.html'
+      }
+    }
+  </script>
+</body>
+</html>
