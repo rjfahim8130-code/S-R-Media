@@ -1,6 +1,6 @@
-// ========== এখানে তোমার Supabase তথ্য বসাও ==========
-const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co'
-const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY_HERE'
+// ========== এখানে আপনার Supabase তথ্য বসাও ==========
+const SUPABASE_URL = 'https://bagscbfokioflnuyxcuz.supabase.co'
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJhZ3NjYmZva2lvZmxudXl4Y3V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0MjAxOTEsImV4cCI6MjEwODk5NjE5MX0.9iU1vhruNSO54Van2GIBM1OrofuUfplWtPC7O7cV60s'
 // ====================================================
 
 // Ad codes (Admin থেকেও পরিবর্তন করা যাবে)
