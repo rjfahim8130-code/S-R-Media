@@ -1,5 +1,5 @@
 const SUPABASE_URL = 'https://fkbernsvlqxgebrpvnlj.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYmVybnN2bHF4Z2VicnB2bmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ1MjE0MTMsImV4cCI6MjExMDA5NzQxM30.pYJjTrg_Pz5ijlWVEAx-4OscqV_klWOuzbtCMSCy0pk';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYmVybnN2bHF4Z2VicnB2bmxqIiwicm9sZSI6ImFub24iisComposite...'; // আপনার সুপাবেশ অ্যানন কি
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const tg = window.Telegram.WebApp;
@@ -29,14 +29,22 @@ function renderVideos(videos) {
     const grid = document.getElementById('videoGrid');
     grid.innerHTML = '';
     if (videos.length === 0) {
-        grid.innerHTML = '<p>কোনো ভিডিও পাওয়া যায়নি।</p>';
+        grid.innerHTML = '<p style="color: white; text-align: center; width: 100%;">কোনো ভিডিও পাওয়া যায়নি।</p>';
         return;
     }
     videos.forEach(video => {
         const card = document.createElement('div');
         card.className = 'video-card';
+        
+        // থাম্বনেইল হ্যান্ডলিং
+        let thumbUrl = 'https://via.placeholder.com/150';
+        if (video.thumbnail_url) {
+            // যদি থাম্বনেইল টেলিগ্রাম file_id হয়, তবে সেটি টেলিগ্রাম এপিআই দিয়ে ফেচ করতে হবে অথবা ডিরেক্ট লিংক হতে হবে
+            thumbUrl = video.thumbnail_url; 
+        }
+
         card.innerHTML = `
-            <img src="${video.thumbnail_url || 'https://via.placeholder.com/150'}" alt="Thumbnail">
+            <img src="${thumbUrl}" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/150'">
             <h4>${video.title}</h4>
         `;
         card.onclick = () => playVideo(video);
@@ -50,9 +58,21 @@ async function playVideo(video) {
 
     const player = document.getElementById('mainPlayer');
     
-    // ব্যাকএন্ড থেকে টেলিগ্রামের ফ্রেশ স্ট্রিম লিংক নেওয়ার জন্য কল করা (অথবা ডিরেক্ট ফাইল আইডি স্ট্রিম)
-    // এখানে আপনার বটের ব্যাকএন্ড API এন্ডপয়েন্ট বা সরাসরি স্ট্রিম লিংক বসবে
-    player.src = video.stream_url || `https://api.telegram.org/file/botYOUR_BOT_TOKEN/...`; // ব্যাকএন্ড থেকে হ্যান্ডেল করতে হবে
+    // টেলিগ্রাম file_id থেকে রিয়েল স্ট্রিম লিংক পাওয়ার জন্য রেন্ডার সার্ভারের ব্যাকএন্ড কল করতে হবে
+    // অথবা আপনার সার্ভার যদি টেলিগ্রাম file_id কে রিডারেক্ট করে:
+    try {
+        const response = await fetch(`https://s-r-media.onrender.com/get-stream/${video.file_id}`);
+        const resData = await response.json();
+        if(resData.url) {
+            player.src = resData.url;
+        } else {
+            // ফলব্যাক হিসেবে ডিরেক্ট ফাইল আইডি বা অন্য কিছু
+            player.src = video.stream_url || "";
+        }
+    } catch (err) {
+        console.error('Error getting stream URL:', err);
+    }
+
     player.play().catch(e => console.log("Autoplay blocked:", e));
 }
 
@@ -83,4 +103,3 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 fetchVideos();
-                        
