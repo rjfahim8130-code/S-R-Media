@@ -11,37 +11,23 @@
     <div class="app-container">
         <header>
             <h2>🎬 S R Media</h2>
-            <input type="text" id="searchInput" placeholder="ভিডিও বা সিরিজ সার্চ করুন...">
         </header>
-
-        <div class="categories">
-            <button class="tab-btn active" data-cat="all">সব</button>
-            <button class="tab-btn" data-cat="movies">মুভিজ</button>
-            <button class="tab-btn" data-cat="turkish_series">তুর্কি সিরিজ</button>
-            <button class="tab-btn" data-cat="cartoons">কার্টুন</button>
-        </div>
-
-        <div id="videoGrid" class="video-grid">
-            <p class="loading">লোড হচ্ছে...</p>
-        </div>
+        <div id="videoGrid" class="video-grid"></div>
     </div>
 
     <!-- Player Modal -->
     <div id="playerModal" class="modal hidden">
-        <button id="closeModal" aria-label="বন্ধ করুন">✖</button>
+        <button id="closeModal" aria-label="Close">✖</button>
         <h3 id="playerTitle">ভিডিও টাইটেল</h3>
-
         <div class="video-wrapper">
             <video id="mainPlayer" controls playsinline controlsList="nodownload"></video>
         </div>
-
         <div class="nav-buttons">
             <button id="prevEp" class="nav-btn">◀ আগের পর্ব</button>
             <button id="nextEp" class="nav-btn">পরের পর্ব ▶</button>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
 </body>
 </html>
