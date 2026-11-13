@@ -1,8 +1,8 @@
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
-const http = require('http'); // রেন্ডারের পোর্টের জন্য
+const http = require('http');
 
-// .env বা রেন্ডার এনভায়রনমেন্ট থেকে BOT_TOKEN অটোমেটিক নিয়ে নেবে
+// রেন্ডার এনভায়রনমেন্ট থেকে BOT_TOKEN অটোমেটিক নেবে
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 const SUPABASE_URL = 'https://fkbernsvlqxgebrpvnlj.supabase.co';
@@ -49,7 +49,6 @@ bot.on('channel_post', async (ctx) => {
 
     const targetChannel = CHANNELS[category];
     if (targetChannel) {
-        // আপনার দেওয়া বটের ইউজারনেম এখানে বসানো হয়েছে
         const BOT_USERNAME = "s_r_media_bot"; 
 
         const inlineKeyboard = [
@@ -68,7 +67,7 @@ bot.on('channel_post', async (ctx) => {
     }
 });
 
-// রেন্ডারের পোর্ট রিকোয়ারমেন্ট পূরণের জন্য ছোট্ট একটি সার্ভার
+// রেন্ডার সার্ভার সচল রাখার জন্য HTTP সার্ভার
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
