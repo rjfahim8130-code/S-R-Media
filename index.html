@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -11,6 +11,7 @@
     <div class="app-container">
         <header>
             <h2>🎬 S R Media</h2>
+            <p class="subtitle">Watch Movies & Series</p>
         </header>
         <div id="videoGrid" class="video-grid"></div>
     </div>
@@ -18,13 +19,13 @@
     <!-- Player Modal -->
     <div id="playerModal" class="modal hidden">
         <button id="closeModal" aria-label="Close">✖</button>
-        <h3 id="playerTitle">ভিডিও টাইটেল</h3>
+        <h3 id="playerTitle">Video Title</h3>
         <div class="video-wrapper">
             <video id="mainPlayer" controls playsinline controlsList="nodownload"></video>
         </div>
         <div class="nav-buttons">
-            <button id="prevEp" class="nav-btn">◀ আগের পর্ব</button>
-            <button id="nextEp" class="nav-btn">পরের পর্ব ▶</button>
+            <button id="prevEp" class="nav-btn">◀ Previous</button>
+            <button id="nextEp" class="nav-btn">Next ▶</button>
         </div>
     </div>
 
