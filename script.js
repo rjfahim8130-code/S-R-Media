@@ -2,129 +2,219 @@ const SUPABASE_URL = 'https://fkbernsvlqxgebrpvnlj.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYmVybnN2bHF4Z2VicnB2bmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ1MjE0MTMsImV4cCI6MjExMDA5NzQxM30.pYJjTrg_Pz5ijlWVEAx-4OscqV_klWOuzbtCMSCy0pk';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// আপনার রেন্ডার ব্যাকএন্ড URL
+const BACKEND_URL = 'https://s-r-media.onrender.com';
+
 const tg = window.Telegram.WebApp;
 tg.expand();
+tg.ready();
 
 let allVideos = [];
+let currentVideo = null;
+let currentSeriesEpisodes = [];
 
 async function fetchVideos() {
-    const { data, error } = await supabase.from('videos').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase
+        .from('videos')
+        .select('*')
+        .order('created_at', { ascending: false });
+
     if (error) {
-        console.error('Error fetching videos:', error);
+        console.error(error);
+        document.getElementById('videoGrid').innerHTML = '<p style="color:#fff;text-align:center;">লোড করতে সমস্যা হয়েছে</p>';
         return;
     }
-    allVideos = data;
-    renderVideos(allVideos);
 
-    const startParam = tg.initDataUnsafe.start_param;
+    allVideos = data || [];
+    renderHome();
+
+    // startapp প্যারামিটার থাকলে সরাসরি প্লে
+    const startParam = tg.initDataUnsafe?.start_param;
     if (startParam) {
-        const targetVideo = allVideos.find(v => v.unique_code === startParam);
-        if (targetVideo) {
-            playVideo(targetVideo);
-        }
+        const target = allVideos.find(v => v.unique_code === startParam);
+        if (target) playVideo(target);
     }
 }
 
-function renderVideos(videos) {
+function getThumbnailUrl(video) {
+    if (!video.thumbnail_file_id) return 'https://via.placeholder.com/300x170?text=No+Thumb';
+    return `${BACKEND_URL}/api/thumbnail?file_id=${encodeURIComponent(video.thumbnail_file_id)}`;
+}
+
+function getStreamUrl(video) {
+    return `${BACKEND_URL}/api/stream?file_id=${encodeURIComponent(video.file_id)}`;
+}
+
+// ========== হোম: সিরিজ + মুভি গ্রিড ==========
+function renderHome(filterCat = 'all', search = '') {
     const grid = document.getElementById('videoGrid');
     grid.innerHTML = '';
-    if (videos.length === 0) {
-        grid.innerHTML = '<p style="color: white; text-align: center; width: 100%;">কোনো ভিডিও পাওয়া যায়নি।</p>';
+
+    let list = [...allVideos];
+
+    if (filterCat !== 'all') {
+        list = list.filter(v => v.category === filterCat);
+    }
+    if (search) {
+        const q = search.toLowerCase();
+        list = list.filter(v =>
+            (v.title || '').toLowerCase().includes(q) ||
+            (v.series_name || '').toLowerCase().includes(q)
+        );
+    }
+
+    if (list.length === 0) {
+        grid.innerHTML = '<p style="color:#aaa;text-align:center;grid-column:1/-1;">কোনো ভিডিও পাওয়া যায়নি</p>';
         return;
     }
-    videos.forEach(video => {
+
+    // সিরিজগুলো গ্রুপ করি
+    const seriesMap = {};
+    const movies = [];
+
+    list.forEach(v => {
+        if (v.series_name) {
+            if (!seriesMap[v.series_name]) seriesMap[v.series_name] = [];
+            seriesMap[v.series_name].push(v);
+        } else {
+            movies.push(v);
+        }
+    });
+
+    // সিরিজ কার্ড
+    Object.keys(seriesMap).forEach(name => {
+        const eps = seriesMap[name].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+        const cover = eps[0];
+        const card = document.createElement('div');
+        card.className = 'video-card series-card';
+        card.innerHTML = `
+            <img src="${getThumbnailUrl(cover)}" alt="" onerror="this.src='https://via.placeholder.com/300x170?text=Series'">
+            <div class="card-info">
+                <h4>${name}</h4>
+                <span class="badge">${eps.length} পর্ব</span>
+            </div>
+        `;
+        card.onclick = () => showSeriesEpisodes(name, eps);
+        grid.appendChild(card);
+    });
+
+    // মুভি কার্ড
+    movies.forEach(v => {
         const card = document.createElement('div');
         card.className = 'video-card';
         card.innerHTML = `
-            <img src="${video.thumbnail_url || 'https://via.placeholder.com/150'}" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/150'">
-            <h4>${video.title}</h4>
+            <img src="${getThumbnailUrl(v)}" alt="" onerror="this.src='https://via.placeholder.com/300x170?text=Movie'">
+            <h4>${v.title}</h4>
         `;
-        card.onclick = () => playVideo(video);
+        card.onclick = () => playVideo(v);
         grid.appendChild(card);
     });
 }
 
-async function playVideo(video) {
+// ========== সিরিজের পর্ব লিস্ট ==========
+function showSeriesEpisodes(seriesName, episodes) {
+    const grid = document.getElementById('videoGrid');
+    grid.innerHTML = '';
+
+    // ব্যাক বাটন
+    const back = document.createElement('div');
+    back.className = 'back-btn';
+    back.innerHTML = '← ফিরে যাও';
+    back.onclick = () => {
+        document.querySelector('.tab-btn.active')?.click();
+    };
+    grid.appendChild(back);
+
+    const title = document.createElement('h3');
+    title.className = 'series-title';
+    title.innerText = seriesName;
+    grid.appendChild(title);
+
+    episodes.forEach(ep => {
+        const card = document.createElement('div');
+        card.className = 'episode-card';
+        const seasonEpText = ep.season > 0 ? `S${String(ep.season).padStart(2,'0')}E${String(ep.episode).padStart(2,'0')} - ` : '';
+        card.innerHTML = `
+            <img src="${getThumbnailUrl(ep)}" alt="">
+            <div>
+                <strong>${seasonEpText}${ep.title}</strong>
+            </div>
+        `;
+        card.onclick = () => playVideo(ep, episodes);
+        grid.appendChild(card);
+    });
+}
+
+// ========== প্লেয়ার ==========
+function playVideo(video, seriesEps = null) {
+    currentVideo = video;
+
+    if (seriesEps) {
+        currentSeriesEpisodes = seriesEps;
+    } else if (video.series_name) {
+        currentSeriesEpisodes = allVideos
+            .filter(v => v.series_name === video.series_name)
+            .sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    } else {
+        currentSeriesEpisodes = [];
+    }
+
     document.getElementById('playerTitle').innerText = video.title;
     document.getElementById('playerModal').classList.remove('hidden');
 
     const player = document.getElementById('mainPlayer');
-    player.src = video.stream_url || ""; 
-    player.play().catch(e => console.log("Autoplay blocked:", e));
+    player.src = getStreamUrl(video);
+    player.play().catch(() => {});
 
-    // --- প্লেয়ারের নিচে পরবর্তী পর্ব / সাজেস্টেড ভিডিও লিস্ট রেন্ডার করা ---
-    let suggestedContainer = document.getElementById('suggestedVideos');
-    if (!suggestedContainer) {
-        suggestedContainer = document.createElement('div');
-        suggestedContainer.id = 'suggestedVideos';
-        suggestedContainer.style.marginTop = '15px';
-        suggestedContainer.style.padding = '10px';
-        suggestedContainer.style.borderTop = '1px solid rgba(255,255,255,0.1)';
-        document.querySelector('.modal-content').appendChild(suggestedContainer);
-    }
-
-    suggestedContainer.innerHTML = '<h4 style="color: #fff; margin-bottom: 10px; font-size: 16px;">পরবর্তী পর্ব ও সাজেস্টেড ভিডিও</h4>';
-
-    // একই ক্যাটাগরির অন্যান্য ভিডিও ফিল্টার করা
-    const relatedVideos = allVideos.filter(v => v.category === video.category && v.unique_code !== video.unique_code);
-
-    if (relatedVideos.length === 0) {
-        suggestedContainer.innerHTML += '<p style="color: #aaa; font-size: 13px;">আর কোনো পর্ব নেই।</p>';
-    } else {
-        const listDiv = document.createElement('div');
-        listDiv.className = 'suggested-list';
-        listDiv.style.display = 'flex';
-        listDiv.style.flexDirection = 'column';
-        listDiv.style.gap = '8px';
-        listDiv.style.maxHeight = '200px';
-        listDiv.style.overflowY = 'auto';
-
-        relatedVideos.forEach(item => {
-            const itemCard = document.createElement('div');
-            itemCard.className = 'suggested-card';
-            itemCard.style.display = 'flex';
-            itemCard.style.alignItems = 'center';
-            itemCard.style.gap = '10px';
-            itemCard.style.background = 'rgba(255,255,255,0.05)';
-            itemCard.style.padding = '6px';
-            itemCard.style.borderRadius = '6px';
-            itemCard.style.cursor = 'pointer';
-
-            itemCard.innerHTML = `
-                <img src="${item.thumbnail_url || 'https://via.placeholder.com/80'}" style="width: 60px; height: 35px; object-fit: cover; border-radius: 4px;" alt="Thumb">
-                <span style="color: #fff; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.title}</span>
-            `;
-            itemCard.onclick = () => playVideo(item); // ক্লিক করলেই পরের ভিডিও প্লে হবে
-            listDiv.appendChild(itemCard);
-        });
-        suggestedContainer.appendChild(listDiv);
-    }
+    // Prev / Next বাটন আপডেট
+    updateNavButtons();
 }
 
+function updateNavButtons() {
+    const prevBtn = document.getElementById('prevEp');
+    const nextBtn = document.getElementById('nextEp');
+
+    if (!prevBtn || !nextBtn) return;
+
+    if (!currentSeriesEpisodes.length || !currentVideo) {
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+        return;
+    }
+
+    const idx = currentSeriesEpisodes.findIndex(v => v.unique_code === currentVideo.unique_code);
+    prevBtn.style.display = idx > 0 ? 'inline-block' : 'none';
+    nextBtn.style.display = idx < currentSeriesEpisodes.length - 1 ? 'inline-block' : 'none';
+
+    prevBtn.onclick = () => {
+        if (idx > 0) playVideo(currentSeriesEpisodes[idx - 1], currentSeriesEpisodes);
+    };
+    nextBtn.onclick = () => {
+        if (idx < currentSeriesEpisodes.length - 1) playVideo(currentSeriesEpisodes[idx + 1], currentSeriesEpisodes);
+    };
+}
+
+// ========== ইভেন্ট ==========
 document.getElementById('closeModal').onclick = () => {
     const player = document.getElementById('mainPlayer');
     player.pause();
-    player.src = "";
+    player.src = '';
     document.getElementById('playerModal').classList.add('hidden');
+    currentVideo = null;
 };
 
 document.getElementById('searchInput').oninput = (e) => {
-    const keyword = e.target.value.toLowerCase();
-    const filtered = allVideos.filter(v => v.title.toLowerCase().includes(keyword));
-    renderVideos(filtered);
+    const cat = document.querySelector('.tab-btn.active')?.dataset.cat || 'all';
+    renderHome(cat, e.target.value);
 };
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.onclick = (e) => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         e.target.classList.add('active');
-        const cat = e.target.dataset.cat;
-        if (cat === 'all') {
-            renderVideos(allVideos);
-        } else {
-            renderVideos(allVideos.filter(v => v.category === cat));
-        }
+        renderHome(e.target.dataset.cat, document.getElementById('searchInput').value);
     };
 });
 
 fetchVideos();
+        
