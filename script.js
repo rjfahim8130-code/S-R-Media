@@ -27,27 +27,23 @@ async function fetchVideos() {
             .select('*')
             .order('id', { ascending: false });
 
-        // Supabase থেকে কোনো এরর আসলে স্ক্রিনে দেখাবে
         if (error) {
             console.error('Fetch error:', error);
             if (grid) grid.innerHTML = `
                 <div style="color:#f87171;text-align:center;padding:20px;grid-column:1/-1;background:#2a1616;border-radius:10px;margin:10px;">
                     <h3>❌ Supabase Error!</h3>
                     <p style="font-size:14px;">${error.message}</p>
-                    <p style="font-size:12px;color:#94a3b8;">সম্ভবত RLS (Row Level Security) ব্লক করেছে। SQL Editor এ পলিসি তৈরি করুন।</p>
                 </div>`;
             return;
         }
 
-        console.log('Videos loaded:', data?.length || 0);
         allVideos = data || [];
 
-        // ডেটাবেস একদম খালি থাকলে স্ক্রিনে দেখাবে
         if (allVideos.length === 0) {
             if (grid) grid.innerHTML = `
                 <div style="color:#fbbf24;text-align:center;padding:20px;grid-column:1/-1;">
                     <h3>⚠️ ডেটাবেসে কোনো ভিডিও নেই!</h3>
-                    <p style="font-size:14px;">Supabase Table Editor চেক করুন।</p>
+                    <p style="font-size:14px;">বটের মাধ্যমে ভিডিও পাঠান।</p>
                 </div>`;
             return;
         }
@@ -60,30 +56,27 @@ async function fetchVideos() {
             if (target) playVideo(target);
         }
     } catch (e) {
-        // ইন্টারনেট বা অন্য কোনো সমস্যা হলে স্ক্রিনে দেখাবে
         console.error(e);
         if (grid) grid.innerHTML = `
             <div style="color:#f87171;text-align:center;padding:20px;grid-column:1/-1;">
                 <h3>❌ লোড ব্যর্থ!</h3>
                 <p style="font-size:14px;">${e.message}</p>
-                <p style="font-size:12px;color:#94a3b8;">ইন্টারনেট কানেকশন চেক করুন অথবা Supabase Key ভুল থাকতে পারে।</p>
             </div>`;
     }
 }
 
-// ========== Thumbnail ==========
+// ========== Thumbnail & Stream ==========
 function getThumb(video) {
-    if (video.thumbnail_url && /^https?:\/\//i.test(video.thumbnail_url)) {
+    if (video.thumbnail_url && String(video.thumbnail_url).startsWith('http')) {
         return video.thumbnail_url;
     }
     const fid = video.thumbnail_file_id;
-    if (!fid || typeof fid !== 'string' || fid.length < 10) return PLACEHOLDER;
-    if (/^https?:\/\//i.test(fid)) return fid;
+    if (!fid || String(fid).length < 10) return PLACEHOLDER;
     return `${BACKEND_URL}/api/thumbnail?file_id=${encodeURIComponent(fid)}`;
 }
 
 function getStream(video) {
-    if (!video || !video.file_id) return '';
+    if (!video.file_id) return '';
     return `${BACKEND_URL}/api/stream?file_id=${encodeURIComponent(video.file_id)}`;
 }
 
@@ -95,6 +88,7 @@ function renderHome(filterCat = 'all', search = '') {
 
     let list = [...allVideos];
     if (filterCat !== 'all') list = list.filter(v => v.category === filterCat);
+    
     if (search) {
         const q = search.toLowerCase();
         list = list.filter(v =>
@@ -112,14 +106,14 @@ function renderHome(filterCat = 'all', search = '') {
     const singles = [];
 
     list.forEach(v => {
-        let seriesName = v.series_name;
-        if (!seriesName) {
+        let name = v.series_name;
+        if (!name) {
             const m = (v.title || '').match(/^(.+?)\s+S\d{1,2}E\d{1,3}/i);
-            if (m) seriesName = m[1].trim();
+            if (m) name = m[1].trim();
         }
-        if (seriesName) {
-            if (!seriesMap[seriesName]) seriesMap[seriesName] = [];
-            seriesMap[seriesName].push(v);
+        if (name) {
+            if (!seriesMap[name]) seriesMap[name] = [];
+            seriesMap[name].push(v);
         } else {
             singles.push(v);
         }
@@ -133,8 +127,7 @@ function renderHome(filterCat = 'all', search = '') {
         const card = document.createElement('div');
         card.className = 'video-card';
         card.innerHTML = `
-            <img src="${getThumb(cover)}" alt="" loading="lazy"
-                 onerror="this.onerror=null;this.src='${PLACEHOLDER}'">
+            <img src="${getThumb(cover)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='${PLACEHOLDER}'">
             <div class="card-info">
                 <h4>${name}</h4>
                 <span class="badge">${eps.length} পর্ব</span>
@@ -148,8 +141,7 @@ function renderHome(filterCat = 'all', search = '') {
         const card = document.createElement('div');
         card.className = 'video-card';
         card.innerHTML = `
-            <img src="${getThumb(v)}" alt="" loading="lazy"
-                 onerror="this.onerror=null;this.src='${PLACEHOLDER}'">
+            <img src="${getThumb(v)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='${PLACEHOLDER}'">
             <h4>${v.title || 'Untitled'}</h4>
         `;
         card.onclick = () => playVideo(v);
@@ -157,10 +149,9 @@ function renderHome(filterCat = 'all', search = '') {
     });
 }
 
-// ========== Series episodes view ==========
+// ========== Series View ==========
 function showSeriesEpisodes(seriesName, episodes) {
     const grid = document.getElementById('videoGrid');
-    if (!grid) return;
     grid.innerHTML = '';
 
     const back = document.createElement('div');
@@ -168,8 +159,9 @@ function showSeriesEpisodes(seriesName, episodes) {
     back.innerHTML = '← ফিরে যাও';
     back.onclick = () => {
         const active = document.querySelector('.tab-btn.active');
-        renderHome(active?.dataset.cat || 'all',
-                   document.getElementById('searchInput')?.value || '');
+        const cat = active ? active.dataset.cat : 'all';
+        const q = document.getElementById('searchInput')?.value || '';
+        renderHome(cat, q);
     };
     grid.appendChild(back);
 
@@ -185,8 +177,7 @@ function showSeriesEpisodes(seriesName, episodes) {
             ? `S${String(ep.season).padStart(2, '0')}E${String(ep.episode).padStart(2, '0')} · `
             : '';
         card.innerHTML = `
-            <img src="${getThumb(ep)}" alt=""
-                 onerror="this.onerror=null;this.src='${PLACEHOLDER_EP}'">
+            <img src="${getThumb(ep)}" alt="" onerror="this.onerror=null;this.src='${PLACEHOLDER_EP}'">
             <div><strong>${se}${ep.title}</strong></div>
         `;
         card.onclick = () => playVideo(ep, episodes);
@@ -194,10 +185,8 @@ function showSeriesEpisodes(seriesName, episodes) {
     });
 }
 
-// ========== Play video ==========
+// ========== Play Video ==========
 function playVideo(video, seriesEps = null) {
-    if (!video) return;
-
     currentSeriesEpisodes = [];
     currentVideo = video;
 
@@ -206,16 +195,13 @@ function playVideo(video, seriesEps = null) {
     } else if (video.series_name) {
         currentSeriesEpisodes = allVideos
             .filter(v => v.series_name === video.series_name)
-            .sort((a, b) =>
-                (a.season || 0) - (b.season || 0) ||
-                (a.episode || 0) - (b.episode || 0)
-            );
+            .sort((a, b) => (a.season || 0) - (b.season || 0) || (a.episode || 0) - (b.episode || 0));
     } else {
         const m = (video.title || '').match(/^(.+?)\s+S\d{1,2}E\d{1,3}/i);
         if (m) {
             const name = m[1].trim();
             currentSeriesEpisodes = allVideos
-                .filter(v => (v.title || '').startsWith(name))
+                .filter(v => (v.title || '').startsWith(name) || v.series_name === name)
                 .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
         }
     }
@@ -224,20 +210,17 @@ function playVideo(video, seriesEps = null) {
     document.getElementById('playerModal').classList.remove('hidden');
 
     const player = document.getElementById('mainPlayer');
-    const streamUrl = getStream(video);
-    if (!streamUrl) {
-        console.error('No stream URL for video:', video);
+    const stream = getStream(video);
+    if (!stream) {
+        alert('স্ট্রিম লিংক পাওয়া যায়নি');
         return;
     }
-    player.src = streamUrl;
-    player.play().catch(err => {
-        console.warn('Autoplay blocked:', err.message);
-    });
+    player.src = stream;
+    player.play().catch(() => {});
 
     updateNavButtons();
 }
 
-// ========== Prev/Next ==========
 function updateNavButtons() {
     const prevBtn = document.getElementById('prevEp');
     const nextBtn = document.getElementById('nextEp');
@@ -251,23 +234,21 @@ function updateNavButtons() {
 
     const idx = currentSeriesEpisodes.findIndex(v =>
         (v.unique_code && v.unique_code === currentVideo.unique_code) ||
-        v.id === currentVideo.id
+        (v.id && v.id === currentVideo.id)
     );
 
     prevBtn.style.display = idx > 0 ? 'inline-block' : 'none';
-    nextBtn.style.display = (idx >= 0 && idx < currentSeriesEpisodes.length - 1)
-        ? 'inline-block' : 'none';
+    nextBtn.style.display = (idx >= 0 && idx < currentSeriesEpisodes.length - 1) ? 'inline-block' : 'none';
 
     prevBtn.onclick = () => {
         if (idx > 0) playVideo(currentSeriesEpisodes[idx - 1], currentSeriesEpisodes);
     };
     nextBtn.onclick = () => {
-        if (idx >= 0 && idx < currentSeriesEpisodes.length - 1)
-            playVideo(currentSeriesEpisodes[idx + 1], currentSeriesEpisodes);
+        if (idx < currentSeriesEpisodes.length - 1) playVideo(currentSeriesEpisodes[idx + 1], currentSeriesEpisodes);
     };
 }
 
-// ========== Close modal ==========
+// ========== Close Modal ==========
 document.getElementById('closeModal').onclick = () => {
     const player = document.getElementById('mainPlayer');
     player.pause();
@@ -278,21 +259,20 @@ document.getElementById('closeModal').onclick = () => {
     currentSeriesEpisodes = [];
 };
 
-// ========== Search ==========
+// ========== Search & Tabs ==========
 document.getElementById('searchInput').oninput = (e) => {
     const cat = document.querySelector('.tab-btn.active')?.dataset.cat || 'all';
     renderHome(cat, e.target.value);
 };
 
-// ========== Tabs ==========
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.onclick = (e) => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         e.target.classList.add('active');
-        renderHome(e.target.dataset.cat,
-                   document.getElementById('searchInput')?.value || '');
+        const q = document.getElementById('searchInput')?.value || '';
+        renderHome(e.target.dataset.cat, q);
     };
 });
 
-// ========== Init ==========
+// Start
 fetchVideos();
