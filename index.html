@@ -26,18 +26,19 @@
         </div>
     </div>
 
-    <!-- Player Modal -->
+    <!-- ===== Player Modal ===== -->
     <div id="playerModal" class="modal hidden">
-        <button id="closeModal">✖ বন্ধ করুন</button>
+        <button id="closeModal" aria-label="বন্ধ করুন">✖</button>
+
         <h3 id="playerTitle">ভিডিও টাইটেল</h3>
 
         <div class="video-wrapper">
             <video id="mainPlayer" controls playsinline controlsList="nodownload"></video>
         </div>
 
-        <div class="nav-buttons" style="margin-top:15px; display:flex; gap:10px; justify-content:center;">
-            <button id="prevEp" style="display:none; padding:8px 16px; border:none; border-radius:6px; background:#2b5278; color:#fff; cursor:pointer;">◀ আগের পর্ব</button>
-            <button id="nextEp" style="display:none; padding:8px 16px; border:none; border-radius:6px; background:#2b5278; color:#fff; cursor:pointer;">পরের পর্ব ▶</button>
+        <div class="nav-buttons">
+            <button id="prevEp" class="nav-btn">◀ আগের পর্ব</button>
+            <button id="nextEp" class="nav-btn">পরের পর্ব ▶</button>
         </div>
     </div>
 
