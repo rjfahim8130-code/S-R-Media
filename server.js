@@ -17,12 +17,28 @@ const CHANNELS = {
 };
 
 const DATA_FILE = path.join(__dirname, 'index_data.json');
-let db = {};
+let db = {}; 
+let adminDb = {}; // অ্যাডমিন লিস্টের ডেটা
 
+// ফাইল থেকে ডেটা লোড
 if (fs.existsSync(DATA_FILE)) {
     try { db = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch (e) {}
 }
-function saveData() { fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2)); }
+function saveData() { 
+    fs.writeFileSync(DATA_FILE, JSON.stringify({ db, adminDb }, null, 2)); 
+}
+
+// সার্ভার রিস্টার্ট হলে ব্যাকআপ থেকে ডেটা রিকভার করা
+function loadData() {
+    if (fs.existsSync(DATA_FILE)) {
+        try { 
+            const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+            db = data.db || {};
+            adminDb = data.adminDb || {};
+        } catch (e) {}
+    }
+}
+loadData();
 
 function parseInfo(caption) {
     const lines = (caption || '').split('\n').map(l => l.trim()).filter(Boolean);
@@ -38,7 +54,23 @@ function parseInfo(caption) {
             break;
         }
     }
-    return { title: firstLine, seriesTag };
+    let title = firstLine, season = 0, episode = 0;
+    if (seMatch) {
+        season = parseInt(seMatch[1]);
+        episode = parseInt(seMatch[2]);
+    }
+    return { title, seriesTag, season, episode };
+}
+
+// প্রাইভেট চ্যানেলে ব্যাকআপ রাখা
+async function backupToTelegram() {
+    try {
+        const backupData = JSON.stringify({ db, adminDb });
+        await bot.telegram.sendMessage(PRIVATE_CHANNEL_ID, 
+            `🗄️ **DATA BACKUP**\n\n\`${backupData}\``, 
+            { parse_mode: 'Markdown' }
+        );
+    } catch (err) { console.error("Backup failed:", err.message); }
 }
 
 bot.on('channel_post', async (ctx) => {
@@ -48,7 +80,25 @@ bot.on('channel_post', async (ctx) => {
 
         const caption = post.caption || '';
         const fileId = post.video.file_id;
-        const { title, seriesTag } = parseInfo(caption);
+        const { title, seriesTag, season, episode } = parseInfo(caption);
+
+        // ডুপ্লিকেট চেক (যদি সিরিজ হয়)
+        if (seriesTag) {
+            if (adminDb[seriesTag] && adminDb[seriesTag].episodes[`${season}_${episode}`]) {
+                await bot.telegram.sendMessage(PRIVATE_CHANNEL_ID, 
+                    `⚠️ **Warning!**\n\nএই এপিসোড (Season ${season}, Episode ${episode}) অলরেডি আপলোড করা আছে। নতুন করে আপলোড করা হলো না।`, 
+                    { reply_to_message_id: post.message_id }
+                );
+                return;
+            }
+
+            // ডেটা সেভ করা
+            if (!adminDb[seriesTag]) adminDb[seriesTag] = { episodes: {}, message_id: null, buttons: [] };
+            adminDb[seriesTag].episodes[`${season}_${episode}`] = { title, fileId, season, episode };
+            
+            // অ্যাডমিন লিস্ট আপডেট করা
+            await updateAdminList(seriesTag);
+        }
 
         let category = 'movies';
         const lower = caption.toLowerCase();
@@ -58,7 +108,6 @@ bot.on('channel_post', async (ctx) => {
         const targetChannel = CHANNELS[category];
         
         if (targetChannel) {
-            // ক্যাপশনে বাংলা, হিন্দি, ইংরেজি তিন ভাষায় লেখা
             await bot.telegram.sendVideo(targetChannel, fileId, {
                 caption: `🎬 **${title}**\n\n` +
                          `👇 ভিডিওটি দেখতে ক্লিক করুন / वीडियो देखने के लिए क्लिक करें / Click to watch:\n\n` +
@@ -70,13 +119,53 @@ bot.on('channel_post', async (ctx) => {
             });
 
             if (seriesTag) {
-                await updateListSystem(targetChannel, seriesTag, title, fileId);
+                await updatePublicList(targetChannel, seriesTag, title, fileId);
             }
         }
     } catch (err) { console.error(err); }
 });
 
-async function updateListSystem(channelId, tag, title, fileId) {
+// প্রাইভেট চ্যানেলে অ্যাডমিন লিস্ট তৈরি/আপডেট করা
+async function updateAdminList(tag) {
+    try {
+        const data = adminDb[tag];
+        // এপিসোডগুলো সিজন ও এপিসোড অনুযায়ী সাজানো
+        const sortedEps = Object.values(data.episodes).sort((a, b) => a.season - b.season || a.episode - b.episode);
+        
+        const keyboard = [];
+        let currentRow = [];
+        
+        sortedEps.forEach(ep => {
+            currentRow.push({ text: `▶️ S${ep.season}E${ep.episode}`, url: `https://t.me/${BOT_USERNAME}/app?startapp=video_${ep.fileId}` });
+            if (currentRow.length === 3) {
+                keyboard.push(currentRow);
+                currentRow = [];
+            }
+        });
+        if (currentRow.length > 0) keyboard.push(currentRow);
+
+        const text = `👑 **ADMIN LIST: ${tag.replace(/_/g, ' ')}**\n\n` +
+                     `মোট ভিডিও: ${sortedEps.length} টি\n` +
+                     `(এখানে ক্লিক করে আপনি সরাসরি ভিডিও দেখতে পারবেন)`;
+
+        if (!data.message_id) {
+            const msg = await bot.telegram.sendMessage(PRIVATE_CHANNEL_ID, text, {
+                parse_mode: 'Markdown',
+                reply_markup: { inline_keyboard: keyboard }
+            });
+            data.message_id = msg.message_id;
+        } else {
+            await bot.telegram.editMessageText(PRIVATE_CHANNEL_ID, data.message_id, undefined, text, {
+                parse_mode: 'Markdown',
+                reply_markup: { inline_keyboard: keyboard }
+            });
+        }
+        saveData();
+    } catch (err) { console.error("Admin list error:", err.message); }
+}
+
+// পাবলিক চ্যানেলে লিস্ট আপডেট (আগের ৯০ বাটনের পেজিনেশন লজিক)
+async function updatePublicList(channelId, tag, title, fileId) {
     try {
         if (!db[tag]) {
             db[tag] = { pages: { "1": { message_id: null, buttons: [] } }, currentPage: 1 };
@@ -93,7 +182,6 @@ async function updateListSystem(channelId, tag, title, fileId) {
             let nextPageNum = parseInt(currentPageStr) + 1;
             seriesData.pages[nextPageNum.toString()] = { message_id: null, buttons: [] };
             currentPage.buttons.push({ text: `➡️ More - Part ${nextPageNum}`, callback_data: `nav|${tag}|${nextPageNum}` });
-            
             seriesData.currentPage = nextPageNum;
             currentPageStr = nextPageNum.toString();
             currentPage = seriesData.pages[currentPageStr];
@@ -120,9 +208,33 @@ async function updateListSystem(channelId, tag, title, fileId) {
             });
         }
         saveData();
+        
+        // প্রতি ৫টি ভিডিওতে ব্যাকআপ
+        if (currentPage.buttons.length % 5 === 0) await backupToTelegram();
     } catch (err) { console.error(err.message); }
 }
 
+// রিস্টোর কমান্ড (বটকে /restore দিলে কাজ করবে)
+bot.command('restore', async (ctx) => {
+    if (ctx.chat.id.toString() !== PRIVATE_CHANNEL_ID) return;
+    try {
+        const backupData = ctx.message.reply_to_message?.text;
+        if (backupData && backupData.includes('DATA BACKUP')) {
+            const jsonStr = backupData.split('```')[1] || backupData.replace('🗄️ DATA BACKUP\n\n', '');
+            const parsed = JSON.parse(jsonStr);
+            db = parsed.db || {};
+            adminDb = parsed.adminDb || {};
+            saveData();
+            await ctx.reply("✅ Data restored successfully!");
+        } else {
+            await ctx.reply("❌ Please reply to a valid backup message with /restore.");
+        }
+    } catch (e) {
+        await ctx.reply("❌ Restore failed: " + e.message);
+    }
+});
+
+// বাটনে ক্লিক করলে (Next Page)
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data.split('|');
     if (data[0] === 'nav') {
