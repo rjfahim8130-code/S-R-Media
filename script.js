@@ -19,43 +19,60 @@ let currentSeriesEpisodes = [];
 // ========== Fetch ==========
 async function fetchVideos() {
     const grid = document.getElementById('videoGrid');
+    if (grid) grid.innerHTML = '<p class="loading" style="grid-column:1/-1;text-align:center;">ডেটা লোড হচ্ছে...</p>';
+    
     try {
         const { data, error } = await supabase
             .from('videos')
             .select('*')
             .order('id', { ascending: false });
 
+        // Supabase থেকে কোনো এরর আসলে স্ক্রিনে দেখাবে
         if (error) {
             console.error('Fetch error:', error);
-            if (grid) grid.innerHTML =
-                `<p style="color:#f87171;text-align:center;padding:20px;grid-column:1/-1;">এরর: ${error.message}</p>`;
+            if (grid) grid.innerHTML = `
+                <div style="color:#f87171;text-align:center;padding:20px;grid-column:1/-1;background:#2a1616;border-radius:10px;margin:10px;">
+                    <h3>❌ Supabase Error!</h3>
+                    <p style="font-size:14px;">${error.message}</p>
+                    <p style="font-size:12px;color:#94a3b8;">সম্ভবত RLS (Row Level Security) ব্লক করেছে। SQL Editor এ পলিসি তৈরি করুন।</p>
+                </div>`;
             return;
         }
 
         console.log('Videos loaded:', data?.length || 0);
         allVideos = data || [];
+
+        // ডেটাবেস একদম খালি থাকলে স্ক্রিনে দেখাবে
+        if (allVideos.length === 0) {
+            if (grid) grid.innerHTML = `
+                <div style="color:#fbbf24;text-align:center;padding:20px;grid-column:1/-1;">
+                    <h3>⚠️ ডেটাবেসে কোনো ভিডিও নেই!</h3>
+                    <p style="font-size:14px;">Supabase Table Editor চেক করুন।</p>
+                </div>`;
+            return;
+        }
+
         renderHome();
 
-        // Deep link
         const startParam = tg?.initDataUnsafe?.start_param;
         if (startParam) {
             const target = allVideos.find(v => v.unique_code === startParam);
-            if (target) {
-                playVideo(target);
-            } else {
-                console.warn('start_param video not found:', startParam);
-            }
+            if (target) playVideo(target);
         }
     } catch (e) {
+        // ইন্টারনেট বা অন্য কোনো সমস্যা হলে স্ক্রিনে দেখাবে
         console.error(e);
-        if (grid) grid.innerHTML =
-            `<p style="color:#f87171;text-align:center;grid-column:1/-1;">লোড ব্যর্থ</p>`;
+        if (grid) grid.innerHTML = `
+            <div style="color:#f87171;text-align:center;padding:20px;grid-column:1/-1;">
+                <h3>❌ লোড ব্যর্থ!</h3>
+                <p style="font-size:14px;">${e.message}</p>
+                <p style="font-size:12px;color:#94a3b8;">ইন্টারনেট কানেকশন চেক করুন অথবা Supabase Key ভুল থাকতে পারে।</p>
+            </div>`;
     }
 }
 
-// ========== Thumbnail (FIXED) ==========
+// ========== Thumbnail ==========
 function getThumb(video) {
-    // thumbnail_url কে সবসময় full URL হিসেবে ধরি
     if (video.thumbnail_url && /^https?:\/\//i.test(video.thumbnail_url)) {
         return video.thumbnail_url;
     }
@@ -177,11 +194,10 @@ function showSeriesEpisodes(seriesName, episodes) {
     });
 }
 
-// ========== Play video (FIXED reset) ==========
+// ========== Play video ==========
 function playVideo(video, seriesEps = null) {
     if (!video) return;
 
-    // reset
     currentSeriesEpisodes = [];
     currentVideo = video;
 
