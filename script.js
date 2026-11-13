@@ -1,5 +1,5 @@
 const SUPABASE_URL = 'https://fkbernsvlqxgebrpvnlj.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYmVybnN2bHF4Z2VicnB2bmxqIiwicm9sZSI6ImFub24iisComposite...'; // আপনার সুপাবেশ অ্যানন কি
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYmVybnN2bHF4Z2VicnB2bmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ1MjE0MTMsImV4cCI6MjExMDA5NzQxM30.pYJjTrg_Pz5ijlWVEAx-4OscqV_klWOuzbtCMSCy0pk';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const tg = window.Telegram.WebApp;
@@ -35,16 +35,8 @@ function renderVideos(videos) {
     videos.forEach(video => {
         const card = document.createElement('div');
         card.className = 'video-card';
-        
-        // থাম্বনেইল হ্যান্ডলিং
-        let thumbUrl = 'https://via.placeholder.com/150';
-        if (video.thumbnail_url) {
-            // যদি থাম্বনেইল টেলিগ্রাম file_id হয়, তবে সেটি টেলিগ্রাম এপিআই দিয়ে ফেচ করতে হবে অথবা ডিরেক্ট লিংক হতে হবে
-            thumbUrl = video.thumbnail_url; 
-        }
-
         card.innerHTML = `
-            <img src="${thumbUrl}" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/150'">
+            <img src="${video.thumbnail_url || 'https://via.placeholder.com/150'}" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/150'">
             <h4>${video.title}</h4>
         `;
         card.onclick = () => playVideo(video);
@@ -57,23 +49,56 @@ async function playVideo(video) {
     document.getElementById('playerModal').classList.remove('hidden');
 
     const player = document.getElementById('mainPlayer');
-    
-    // টেলিগ্রাম file_id থেকে রিয়েল স্ট্রিম লিংক পাওয়ার জন্য রেন্ডার সার্ভারের ব্যাকএন্ড কল করতে হবে
-    // অথবা আপনার সার্ভার যদি টেলিগ্রাম file_id কে রিডারেক্ট করে:
-    try {
-        const response = await fetch(`https://s-r-media.onrender.com/get-stream/${video.file_id}`);
-        const resData = await response.json();
-        if(resData.url) {
-            player.src = resData.url;
-        } else {
-            // ফলব্যাক হিসেবে ডিরেক্ট ফাইল আইডি বা অন্য কিছু
-            player.src = video.stream_url || "";
-        }
-    } catch (err) {
-        console.error('Error getting stream URL:', err);
+    player.src = video.stream_url || ""; 
+    player.play().catch(e => console.log("Autoplay blocked:", e));
+
+    // --- প্লেয়ারের নিচে পরবর্তী পর্ব / সাজেস্টেড ভিডিও লিস্ট রেন্ডার করা ---
+    let suggestedContainer = document.getElementById('suggestedVideos');
+    if (!suggestedContainer) {
+        suggestedContainer = document.createElement('div');
+        suggestedContainer.id = 'suggestedVideos';
+        suggestedContainer.style.marginTop = '15px';
+        suggestedContainer.style.padding = '10px';
+        suggestedContainer.style.borderTop = '1px solid rgba(255,255,255,0.1)';
+        document.querySelector('.modal-content').appendChild(suggestedContainer);
     }
 
-    player.play().catch(e => console.log("Autoplay blocked:", e));
+    suggestedContainer.innerHTML = '<h4 style="color: #fff; margin-bottom: 10px; font-size: 16px;">পরবর্তী পর্ব ও সাজেস্টেড ভিডিও</h4>';
+
+    // একই ক্যাটাগরির অন্যান্য ভিডিও ফিল্টার করা
+    const relatedVideos = allVideos.filter(v => v.category === video.category && v.unique_code !== video.unique_code);
+
+    if (relatedVideos.length === 0) {
+        suggestedContainer.innerHTML += '<p style="color: #aaa; font-size: 13px;">আর কোনো পর্ব নেই।</p>';
+    } else {
+        const listDiv = document.createElement('div');
+        listDiv.className = 'suggested-list';
+        listDiv.style.display = 'flex';
+        listDiv.style.flexDirection = 'column';
+        listDiv.style.gap = '8px';
+        listDiv.style.maxHeight = '200px';
+        listDiv.style.overflowY = 'auto';
+
+        relatedVideos.forEach(item => {
+            const itemCard = document.createElement('div');
+            itemCard.className = 'suggested-card';
+            itemCard.style.display = 'flex';
+            itemCard.style.alignItems = 'center';
+            itemCard.style.gap = '10px';
+            itemCard.style.background = 'rgba(255,255,255,0.05)';
+            itemCard.style.padding = '6px';
+            itemCard.style.borderRadius = '6px';
+            itemCard.style.cursor = 'pointer';
+
+            itemCard.innerHTML = `
+                <img src="${item.thumbnail_url || 'https://via.placeholder.com/80'}" style="width: 60px; height: 35px; object-fit: cover; border-radius: 4px;" alt="Thumb">
+                <span style="color: #fff; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.title}</span>
+            `;
+            itemCard.onclick = () => playVideo(item); // ক্লিক করলেই পরের ভিডিও প্লে হবে
+            listDiv.appendChild(itemCard);
+        });
+        suggestedContainer.appendChild(listDiv);
+    }
 }
 
 document.getElementById('closeModal').onclick = () => {
