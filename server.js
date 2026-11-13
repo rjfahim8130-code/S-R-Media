@@ -2,7 +2,9 @@ const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 const http = require('http'); // রেন্ডারের পোর্টের জন্য
 
+// .env বা রেন্ডার এনভায়রনমেন্ট থেকে BOT_TOKEN অটোমেটিক নিয়ে নেবে
 const bot = new Telegraf(process.env.BOT_TOKEN);
+
 const SUPABASE_URL = 'https://fkbernsvlqxgebrpvnlj.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYmVybnN2bHF4Z2VicnB2bmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ1MjE0MTMsImV4cCI6MjExMDA5NzQxM30.pYJjTrg_Pz5ijlWVEAx-4OscqV_klWOuzbtCMSCy0pk';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -47,8 +49,11 @@ bot.on('channel_post', async (ctx) => {
 
     const targetChannel = CHANNELS[category];
     if (targetChannel) {
+        // আপনার দেওয়া বটের ইউজারনেম এখানে বসানো হয়েছে
+        const BOT_USERNAME = "s_r_media_bot"; 
+
         const inlineKeyboard = [
-            [{ text: "▶️ S R Media (Watch Now)", url: `https://t.me/YourBotUsername/miniapp?startapp=${uniqueCode}` }],
+            [{ text: "▶️ S R Media (Watch Now)", url: `https://t.me/${BOT_USERNAME}/miniapp?startapp=${uniqueCode}` }],
             [PUBLIC_CHANNEL_LINKS[0], PUBLIC_CHANNEL_LINKS[1]],
             [PUBLIC_CHANNEL_LINKS[2]]
         ];
