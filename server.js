@@ -1,7 +1,6 @@
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 const http = require('http');
-const https = require('https');
 const url = require('url');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -11,7 +10,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const PRIVATE_CHANNEL_ID = '-1003969249609';
-const BOT_USERNAME = 's_r_media_bot'; // তোমার বট ইউজারনেম
+const BOT_USERNAME = 's_r_media_bot';
 
 const CHANNELS = {
     movies: '-1004447821482',
@@ -30,8 +29,7 @@ function parseSeriesInfo(caption) {
     const lines = caption.split('\n').map(l => l.trim()).filter(Boolean);
     const firstLine = lines[0] || "Untitled";
 
-    // S01E05 / S1E5 / Season 1 Episode 5 প্যাটার্ন
-    const seMatch = firstLine.match(/S(\d{1,2})E(\d{1,3})/i) || 
+    const seMatch = firstLine.match(/S(\d{1,2})E(\d{1,3})/i) ||
                     firstLine.match(/Season\s*(\d+)\s*Episode\s*(\d+)/i);
 
     let series_name = null;
@@ -42,14 +40,57 @@ function parseSeriesInfo(caption) {
     if (seMatch) {
         season = parseInt(seMatch[1]);
         episode = parseInt(seMatch[2]);
-        // SxxExx এর আগের অংশকে সিরিজ নাম ধরো
-        series_name = firstLine.replace(/S\d{1,2}E\d{1,3}.*/i, '').trim()
-                               .replace(/Season\s*\d+\s*Episode\s*\d+.*/i, '').trim();
+        series_name = firstLine
+            .replace(/S\d{1,2}E\d{1,3}.*/i, '')
+            .replace(/Season\s*\d+\s*Episode\s*\d+.*/i, '')
+            .trim();
         if (!series_name) series_name = firstLine;
         title = firstLine;
     }
 
     return { title, series_name, season, episode };
+}
+
+// ========== Category নির্ধারণ (FIXED) ==========
+function detectCategory(caption, series_name) {
+    const lower = (caption || '').toLowerCase();
+
+    // Explicit tags সবসময় priority পাবে
+    if (lower.includes('#cartoon')) return { category: 'cartoons', prefix: 'ct' };
+    if (lower.includes('#turkish')) return { category: 'turkish_series', prefix: 'tr' };
+    if (lower.includes('#series'))  return { category: 'turkish_series', prefix: 'tr' };
+    if (lower.includes('#movie'))   return { category: 'movies', prefix: 'mv' };
+
+    // Tag না থাকলে — series_name থাকলেও ডিফল্ট movies
+    // (তুর্কি সিরিজের জন্য অবশ্যই #turkish বা #series ট্যাগ দিতে হবে)
+    return { category: 'movies', prefix: 'mv' };
+}
+
+// ========== Unique code with retry ==========
+async function insertVideoWithRetry(payload, maxRetries = 3) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const uniqueCode = `${payload.prefix}-${Math.random().toString(36).substring(2, 8)}`;
+        const { error } = await supabase.from('videos').insert([{
+            title: payload.title,
+            file_id: payload.file_id,
+            thumbnail_file_id: payload.thumbnail_file_id,
+            category: payload.category,
+            unique_code: uniqueCode,
+            series_name: payload.series_name || null,
+            season: payload.season,
+            episode: payload.episode
+        }]);
+
+        if (!error) return { ok: true, uniqueCode };
+        // duplicate unique_code হলে retry
+        if (error.code === '23505' || /duplicate/i.test(error.message || '')) {
+            console.warn(`Duplicate code ${uniqueCode}, retrying...`);
+            continue;
+        }
+        console.error('Supabase insert error:', error);
+        return { ok: false, error };
+    }
+    return { ok: false, error: new Error('Max retries exceeded') };
 }
 
 // ========== বট: চ্যানেল পোস্ট ==========
@@ -64,77 +105,80 @@ bot.on('channel_post', async (ctx) => {
         const thumbFileId = post.video.thumb ? post.video.thumb.file_id : null;
 
         const { title, series_name, season, episode } = parseSeriesInfo(caption);
+        const { category, prefix } = detectCategory(caption, series_name);
 
-        let category = 'movies';
-        let prefix = 'mv';
-        if (caption.toLowerCase().includes('#turkish') || caption.toLowerCase().includes('#series') || series_name) {
-            category = 'turkish_series';
-            prefix = 'tr';
-        } else if (caption.toLowerCase().includes('#cartoon')) {
-            category = 'cartoons';
-            prefix = 'ct';
-        }
+        const result = await insertVideoWithRetry({
+            title, file_id: fileId, thumbnail_file_id: thumbFileId,
+            category, prefix, series_name, season, episode
+        });
 
-        const uniqueCode = `${prefix}-${Math.random().toString(36).substring(2, 8)}`;
+        if (!result.ok) return;
 
-        const { error } = await supabase.from('videos').insert([{
-            title,
-            file_id: fileId,
-            thumbnail_file_id: thumbFileId,
-            category,
-            unique_code: uniqueCode,
-            series_name: series_name || null,
-            season,
-            episode
-        }]);
-
-        if (error) {
-            console.error('Supabase insert error:', error);
+        const targetChannel = CHANNELS[category];
+        if (!targetChannel) {
+            console.warn(`No channel configured for category: ${category}`);
             return;
         }
 
-        const targetChannel = CHANNELS[category];
-        if (targetChannel) {
-            const inlineKeyboard = [
-                [{ text: "▶️ S R Media (Watch Now)", url: `https://t.me/${BOT_USERNAME}/app?startapp=${uniqueCode}` }],
-                [PUBLIC_CHANNEL_LINKS[0], PUBLIC_CHANNEL_LINKS[1]],
-                [PUBLIC_CHANNEL_LINKS[2]]
-            ];
+        const inlineKeyboard = [
+            [{ text: "▶️ S R Media (Watch Now)", url: `https://t.me/${BOT_USERNAME}/app?startapp=${result.uniqueCode}` }],
+            [PUBLIC_CHANNEL_LINKS[0], PUBLIC_CHANNEL_LINKS[1]],
+            [PUBLIC_CHANNEL_LINKS[2]]
+        ];
 
-            const captionText = `🎬 **${title}**\n\n👇 মিনি অ্যাপে দেখতে ক্লিক করুন:`;
+        const captionText = `🎬 **${title}**\n\n👇 মিনি অ্যাপে দেখতে ক্লিক করুন:`;
 
+        // thumbnail থাকলে photo, না হলে video — দুইটাই fail হলে শুধু text
+        try {
+            if (thumbFileId) {
+                await bot.telegram.sendPhoto(targetChannel, thumbFileId, {
+                    caption: captionText,
+                    parse_mode: 'Markdown',
+                    reply_markup: { inline_keyboard: inlineKeyboard }
+                });
+            } else {
+                await bot.telegram.sendVideo(targetChannel, fileId, {
+                    caption: captionText,
+                    parse_mode: 'Markdown',
+                    reply_markup: { inline_keyboard: inlineKeyboard }
+                });
+            }
+        } catch (err) {
+            console.error('Primary send failed, trying fallback:', err.message);
+            // Fallback: video পাঠাও
             try {
-                if (thumbFileId) {
-                    // থাম্বনেইল থাকলে ফটো পাঠাও
-                    await bot.telegram.sendPhoto(targetChannel, thumbFileId, {
-                        caption: captionText,
-                        parse_mode: 'Markdown',
-                        reply_markup: { inline_keyboard: inlineKeyboard }
-                    });
-                } else {
-                    // থাম্বনেইল না থাকলে ভিডিওই পাঠাও
-                    await bot.telegram.sendVideo(targetChannel, fileId, {
-                        caption: captionText,
-                        parse_mode: 'Markdown',
-                        reply_markup: { inline_keyboard: inlineKeyboard }
-                    });
-                }
-            } catch (err) {
-                console.error('Public channel post error:', err.message);
+                await bot.telegram.sendVideo(targetChannel, fileId, {
+                    caption: captionText,
+                    parse_mode: 'Markdown',
+                    reply_markup: { inline_keyboard: inlineKeyboard }
+                });
+            } catch (err2) {
+                console.error('Video fallback also failed:', err2.message);
             }
         }
 
-        console.log(`Saved: ${title} | ${uniqueCode}`);
+        console.log(`Saved: ${title} | ${result.uniqueCode} | ${category}`);
     } catch (err) {
         console.error('channel_post error:', err);
     }
 });
 
-// ========== HTTP সার্ভার (স্ট্রিম + থাম্বনেইল) ==========
+// ========== HTTP সার্ভার ==========
 const PORT = process.env.PORT || 3000;
 
+// Safe getFile wrapper
+async function safeGetFile(fileId) {
+    try {
+        const file = await bot.telegram.getFile(fileId);
+        if (!file || !file.file_path) return null;
+        return file;
+    } catch (err) {
+        console.error('getFile error:', err.message);
+        return null;
+    }
+}
+
 const server = http.createServer(async (req, res) => {
-    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -148,72 +192,73 @@ const server = http.createServer(async (req, res) => {
     const parsed = url.parse(req.url, true);
     const pathname = parsed.pathname;
 
-    // ===== /api/stream?file_id=XXX =====
+    // ===== /api/stream =====
     if (pathname === '/api/stream') {
         const fileId = parsed.query.file_id;
-        if (!fileId) {
+        if (!fileId || typeof fileId !== 'string') {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'file_id required' }));
             return;
         }
 
-        try {
-            const file = await bot.telegram.getFile(fileId);
-            if (!file.file_path) {
-                res.writeHead(404, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'File not found or too large (>20MB)' }));
-                return;
-            }
-
-            const tgUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
-
-            // Redirect করে দিই (টোকেন ফ্রন্টএন্ডে দেখা যায় না)
-            res.writeHead(302, { Location: tgUrl });
-            res.end();
-        } catch (err) {
-            console.error('Stream error:', err.message);
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: err.message }));
+        const file = await safeGetFile(fileId);
+        if (!file) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: 'File not found. Telegram Bot API 20MB limit exceeded হলে stream করা সম্ভব না।'
+            }));
+            return;
         }
+
+        const tgUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+        res.writeHead(302, { Location: tgUrl });
+        res.end();
         return;
     }
 
-    // ===== /api/thumbnail?file_id=XXX =====
+    // ===== /api/thumbnail =====
     if (pathname === '/api/thumbnail') {
         const fileId = parsed.query.file_id;
-        if (!fileId) {
+        if (!fileId || typeof fileId !== 'string') {
             res.writeHead(400);
             res.end('file_id required');
             return;
         }
 
-        try {
-            const file = await bot.telegram.getFile(fileId);
-            if (!file.file_path) {
-                res.writeHead(404);
-                res.end('Not found');
-                return;
-            }
-            const tgUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
-            res.writeHead(302, { Location: tgUrl });
-            res.end();
-        } catch (err) {
-            res.writeHead(500);
-            res.end(err.message);
+        const file = await safeGetFile(fileId);
+        if (!file) {
+            res.writeHead(404);
+            res.end('Not found');
+            return;
         }
+
+        const tgUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+        res.writeHead(302, { Location: tgUrl });
+        res.end();
         return;
     }
 
     // Health check
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('S R Media Bot is running successfully!\n');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+        status: 'ok',
+        service: 'S R Media Bot',
+        endpoints: ['/api/stream', '/api/thumbnail'],
+        timestamp: new Date().toISOString()
+    }));
 });
 
 server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
 
-bot.launch().then(() => console.log('S R Media Bot started'));
+// Bot launch — crash protection সহ
+bot.launch()
+    .then(() => console.log('✅ S R Media Bot started'))
+    .catch(err => {
+        console.error('❌ Bot launch failed:', err.message);
+        // Server চলুক, শুধু bot fail করেছে
+    });
+
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
-        
